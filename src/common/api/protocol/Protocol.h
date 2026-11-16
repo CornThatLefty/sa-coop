@@ -59,6 +59,7 @@ enum MsgId : uint8_t {
     S_INVITE = 34,           // str invite code for internet play (when the server learned its public address)
     S_WORLD_NEWGAME = 35,    // to a partner: start a new game and join the host where the prologue left it
     S_WORLD_WAIT = 36,       // to a partner: the host plays a new game's prologue, keep waiting
+    S_BALANCE = 37,          // the game's balance settings (Balance.h), on join and after an admin's /reloadbalance
 
     // ---- relayed game messages (client <-> client) ----
     G_FIRST = 64,
@@ -121,7 +122,8 @@ enum MsgId : uint8_t {
     G_FADE = 126,
     G_CUTSCENE = 127,         // load/start/finish/skip
     G_SCRIPT_VARS = 128,      // story progress (script global variables)
-    G_MISSION_REWARD = 129,
+    G_MISSION_REWARD = 129,   // reliable, host -> partner: i32 its part of what the passed mission paid the host, u8 how
+                              // many players it went to (the host among them), u8 the payout mode (Balance.h)
     G_TELEPORT = 130,         // teleport request/command
     G_GAME_EVENT = 131,       // misc one-shot events (audio, widescreen, camera shake)
     G_MISSION_WAIT = 132,     // the host stands in a mission marker and waits for the partner: u8 on, 5 x f32 its area when
@@ -245,7 +247,7 @@ enum MsgId : uint8_t {
                               // me, 3 yes, 4 no), u8 to. The asker's game carries a yes out (/tphere: G_TELEPORT)
     G_MONEY = 177,            // reliable: the players' money (F2, Money.cpp): u8 op; 1 what the sender has now, i32; 2 a gift,
                               // u8 to, i32; 3 the gift came, u8 to (its giver), i32; 4 host -> partner: its share of what
-                              // Big Smoke's courier paid the host (Courier.cpp), u8 to, i32
+                              // Big Smoke's courier paid the host (Courier.cpp), u8 to, i32 (by the payout mode, Balance.h)
     G_WEAPON_GIFT = 178,      // reliable: a weapon as a gift (F2, WeaponGift.cpp): u8 op (1 give, 2 it came, 3 back: its slot
                               // holds another weapon there), u8 to, u8 weapon, i32 rounds
     G_RADIO = 181,            // reliable, from a driver with players in its car (Radio.cpp): u16 vehicle, i8 station, u8 n,

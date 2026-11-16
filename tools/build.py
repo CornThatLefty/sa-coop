@@ -8,6 +8,7 @@ SA:COOP build script (llvm-mingw, i686).
     python tools/build.py --clean      remove the build output (build/release, build/debug)
     python tools/build.py dist         build everything and assemble dist/ (ready-to-play package)
     python tools/build.py --with DIR   also compile the .cpp files of DIR into coop.dll (the test bot)
+    python tools/build.py testclient   build coop-test-client.exe, the headless player of tools/test_server.py
 
 The toolchain is expected in toolchain/llvm-mingw (see tools/get-toolchain.ps1).
 """
@@ -88,7 +89,15 @@ def targets(extra=()):
         "libs": ["-lkernel32", "-luser32"],
         "ldflags": [str(ROOT / "src" / "loader" / "app" / "entry" / "vorbisFile.def")],
     }
-    return {"client": client, "server": server, "loader": loader}
+    # coop-test-client.exe: a headless player for the server's tests (tools/test_server.py); not part of the package
+    testclient = {
+        "name": "testclient", "kind": "exe", "out": "coop-test-client.exe",
+        "sources": glob("tools/test-client", "*.cpp"), "rc": [],
+        "includes": COMMON_INC, "defines": [], "cflags": [],
+        "deps": [common, ENET],
+        "libs": ["-lws2_32", "-lwinmm", "-lwinhttp", "-lbcrypt"],
+    }
+    return {"client": client, "server": server, "loader": loader, "testclient": testclient}
 
 
 def parse_depfile(text: str):
@@ -179,7 +188,7 @@ def compile_target(t, debug, pool, compdb):
 def file_version():
     """COOP_VERSION_STR of Version.h as the four numbers of a version resource: "0.2.7" -> "0,2,7,0"."""
     text = (ROOT / "src" / "common" / "config" / "version" / "Version.h").read_text(encoding="utf-8")
-    nums = re.search(r'#define\s+COOP_VERSION_STR\s+"([\d.]+)"', text).group(1).split(".")
+    nums = re.search(r'#define\s+COOP_VERSION_STR\s+"([\d.]+)', text).group(1).split(".")  # "0.3.4-fork.1": 0.3.4
     return ",".join((nums + ["0"] * 4)[:4])
 
 
@@ -281,7 +290,7 @@ def main():
         return 1
     extra = [str(p.resolve()) for d in args.extra for p in sorted(Path(d).glob("**/*.cpp"))]
     all_t = targets(extra)
-    want = [w for w in args.what if w != "dist"] or list(all_t.keys())
+    want = [w for w in args.what if w != "dist"] or [n for n in all_t if n != "testclient"]
     compdb = []
     ok = True
     built_deps = {}

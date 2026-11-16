@@ -28,6 +28,7 @@
 #include "common/api/protocol/Protocol.h"
 #include "common/lib/log/Log.h"
 #include "common/lib/util/Util.h"
+#include "entities/balance/Balance.h"
 #include "entities/ped/Peds.h"
 #include "entities/player/Players.h"
 #include "entities/vehicle/Vehicles.h"
@@ -217,6 +218,8 @@ bool __cdecl HookGenerateDamageEvent(CPed* victim, CEntity* creator, int weapon,
         // a copy dies of the hit that killed it in its owner's game: the game picks its fall (Peds::ApplyMirror)
         if (NetPed* dn = Peds::Instance().Find(victim); dn && dn->dying)
             return g_origGenerateDamage(victim, creator, weapon, damage, piece, dir);
+        // who hits a player is hostile to the balance from now on (entities/balance)
+        if (victim == FindPlayerPed(0) || Players::Instance().FindByPed(victim)) balance::NoteAttack(creator);
         if (cam::WideScreenOn() && FromOtherSide(creator)) return true;  // see the top of the file
         bool fromRemote = IsRemotePlayerEntity(creator);
         if (fromRemote && victim == FindPlayerPed(0))  // see the top of the file
@@ -232,7 +235,7 @@ bool __cdecl HookGenerateDamageEvent(CPed* victim, CEntity* creator, int weapon,
             NetPed* np = Peds::Instance().Find(victim);
             if ((np && np->owner != Net().MyId()) || Players::Instance().FindByPed(victim)) return true;
             KeepWanted keep;
-            return g_origGenerateDamage(victim, creator, weapon, damage, piece, dir);
+            return g_origGenerateDamage(victim, creator, weapon, balance::DamageToNpc(victim, weapon, damage), piece, dir);
         }
         if (!IsCollision(weapon) && fromRemote && !IsSpray(weapon)) return true;
         if (RemotePlayer* rp = Players::Instance().FindByPed(victim)) {
@@ -270,6 +273,10 @@ bool __cdecl HookGenerateDamageEvent(CPed* victim, CEntity* creator, int weapon,
             }
             return true;
         }
+        // The balance: a non-player person's hit on our player by the damage multiplier, a hit on a hostile person of this
+        // game by 1 / the health multiplier. The other player's hits on our people come through HandleDamage.
+        if (victim == FindPlayerPed(0)) damage = balance::DamageToPlayer(creator, weapon, damage);
+        else if (!Players::Instance().FindByPed(victim)) damage = balance::DamageToNpc(victim, weapon, damage);
     }
     return g_origGenerateDamage(victim, creator, weapon, damage, piece, dir);
 }
@@ -487,7 +494,8 @@ void HandleDamage(uint8_t from, Reader& r) {
                 }
                 FightAs fight(by, fightSet, fightMove);
                 if (weapon == WEAPON_RAMMEDBYCAR && car) g_origKillWithCar(ped, nullptr, car, damage, 0);
-                else if (weapon != WEAPON_RAMMEDBYCAR) g_origGenerateDamage(ped, by, weapon, (int)damage, piece, dir);
+                else if (weapon != WEAPON_RAMMEDBYCAR)
+                    g_origGenerateDamage(ped, by, weapon, balance::DamageToNpc(ped, weapon, (int)damage), piece, dir);
             }
             LOGI("Player %d hit our ped %04X: weapon %d, damage %.0f, health now %.0f", from, netId, weapon, damage, ped->Health());
             if (ped->Health() <= 0.0f) {  // the loot falls in the killer's game
@@ -508,7 +516,7 @@ void HandleDamage(uint8_t from, Reader& r) {
             CPed* hitter = h >= 0 ? GetPed(h) : nullptr;
             KeepWanted keep;
             FightAs fight(hitter, fightSet, fightMove);
-            g_origGenerateDamage(ped, hitter, weapon, (int)damage, piece, dir);
+            g_origGenerateDamage(ped, hitter, weapon, balance::DamageToNpc(ped, weapon, (int)damage), piece, dir);
             LOGD("Ped %04X of player %d hit our ped %04X: weapon %d, damage %.0f", by, from, netId, weapon, damage);
         }
     } else if (kind == TARGET_PLAYER_BY_PLAYER) {
@@ -524,7 +532,9 @@ void HandleDamage(uint8_t from, Reader& r) {
         CPed* npc = h >= 0 ? GetPed(h) : nullptr;
         {
             FightAs fight(npc, fightSet, fightMove);
-            g_origGenerateDamage(FindPlayerPed(0), npc, weapon, (int)damage, piece, SideHere(npc, weapon, dir));
+            balance::NoteAttack(npc);
+            g_origGenerateDamage(FindPlayerPed(0), npc, weapon, balance::DamageToPlayer(npc, weapon, (int)damage), piece,
+                                 SideHere(npc, weapon, dir));
         }
         LOGI("An NPC %04X of player %d hit us: weapon %d, damage %.0f (fight set %d, move %d)", netId, from, weapon, damage,
              fightSet == 0xFF ? -1 : fightSet, fightMove == 0xFF ? -1 : fightMove);

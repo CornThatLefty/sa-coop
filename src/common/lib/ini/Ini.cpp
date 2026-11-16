@@ -99,4 +99,24 @@ void Ini::Set(const std::string& section, const std::string& key, const std::str
 
 void Ini::SetInt(const std::string& section, const std::string& key, int value) { Set(section, key, std::to_string(value)); }
 
+bool Ini::Has(const std::string& section, const std::string& key) const { return m_values.count(MakeKey(section, key)) != 0; }
+
+std::vector<std::string> Ini::Sections() const {
+    std::vector<std::string> out;
+    for (auto& l : m_lines) {
+        if (l.section.empty()) continue;
+        bool seen = false;
+        for (auto& s : out) seen = seen || ToLower(s) == ToLower(l.section);
+        if (!seen) out.push_back(l.section);
+    }
+    return out;
+}
+
+std::vector<std::pair<std::string, std::string>> Ini::Items(const std::string& section) const {
+    std::vector<std::pair<std::string, std::string>> out;
+    for (auto& l : m_lines)
+        if (!l.key.empty() && ToLower(l.section) == ToLower(section)) out.push_back({l.key, Get(l.section, l.key)});
+    return out;
+}
+
 }  // namespace coop

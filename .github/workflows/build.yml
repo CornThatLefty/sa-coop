@@ -43,6 +43,11 @@ jobs:
       - name: Build the archive
         run: python tools/build.py dist
 
+      - name: Test the server
+        run: |
+          python tools/build.py server testclient
+          python tools/test_server.py
+
       - uses: actions/upload-artifact@v4
         with:
           name: SA-COOP
@@ -55,3 +60,4 @@ jobs:
           name: SA:COOP ${{ github.ref_name }}
           files: dist/SA-COOP.zip
           body_path: .github/release-notes.md
+          prerelease: ${{ contains(github.ref_name, '-fork.') }}  # the fork's test builds

@@ -27,6 +27,8 @@ void Session::Connect(const std::string& host, uint16_t port, const std::string&
     m_inviteCode.clear();
     m_worldRetries = 0;
     m_myId = m_hostId = 255;
+    m_balance = proto::Balance();
+    m_balanceRevision = 0;
     m_state = State::Connecting;
     if (!m_net.Start(host, port)) {
         m_state = State::Failed;
@@ -44,6 +46,8 @@ void Session::Disconnect(const std::string& reason) {
     m_world.clear();
     m_worldExpected = m_worldRecv = 0;
     if (wasOnline && onOffline) onOffline(reason);
+    m_balance = proto::Balance();
+    m_balanceRevision = 0;
 }
 
 const PeerInfo* Session::Peer(uint8_t id) const {
@@ -135,6 +139,8 @@ void Session::Update() {
         m_net.Stop();
         m_peers.clear();
         if (wasOnline && onOffline) onOffline(m_failReason);
+        m_balance = proto::Balance();
+        m_balanceRevision = 0;
     }
 }
 
@@ -296,6 +302,18 @@ void Session::HandleService(uint8_t id, Reader& r) {
         case S_WORLD_WANTED:
             if (onWorldWanted) onWorldWanted();
             break;
+        case S_BALANCE: {
+            proto::Balance b;
+            if (!b.Read(r)) {
+                LOGW("S_BALANCE is damaged: the balance stays as it was");
+                break;
+            }
+            m_balance = b;
+            ++m_balanceRevision;
+            LOGI("Balance settings received (revision %u, %zu excluded models, %zu excluded missions, %zu mission overrides)",
+                 m_balanceRevision, b.excludeModels.size(), b.excludeMissions.size(), b.overrides.size());
+            break;
+        }
         default:
             LOGW("Unknown service message %u", id);
             break;

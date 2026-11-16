@@ -19,6 +19,11 @@ public:
     void Set(const std::string& section, const std::string& key, const std::string& value);
     void SetInt(const std::string& section, const std::string& key, int value);
 
+    bool Has(const std::string& section, const std::string& key) const;
+    std::vector<std::string> Sections() const;  // as written in the file, each once, in the file's order
+    // the keys of a section with their values, in the file's order
+    std::vector<std::pair<std::string, std::string>> Items(const std::string& section) const;
+
 private:
     struct Line {
         std::string section;  // section the line belongs to

@@ -15,16 +15,20 @@
 
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 #include "common/api/protocol/Protocol.h"
 #include "common/lib/log/Log.h"
 #include "common/lib/util/Util.h"
+#include "entities/balance/Balance.h"
 #include "entities/mission/Mission.h"
 #include "entities/player/Players.h"
 #include "shared/api/net-session/Session.h"
+#include "shared/config/Config.h"
 #include "shared/game/Game.h"
 #include "shared/lib/core/Core.h"
 #include "shared/lib/memory/Memory.h"
+#include "shared/ui/chat/Chat.h"
 
 namespace coop {
 
@@ -145,14 +149,25 @@ void AfterCommand(void* script, uint16_t op) {
     int32_t paid = Int(1);
     CPlayerPed* me = FindPlayerPed(0);
     if (paid <= 0 || !me) return;
-    for (auto& [id, rp] : Players::Instance().All()) {
-        if (!rp.ped || !rp.hasState || (rp.ped->GetPosition() - me->GetPosition()).Length() > kShareRange) continue;
+    std::vector<uint8_t> near;
+    for (auto& [id, rp] : Players::Instance().All())
+        if (rp.ped && rp.hasState && (rp.ped->GetPosition() - me->GetPosition()).Length() <= kShareRange) near.push_back(id);
+    if (near.empty()) return;
+    // by the payout mode (entities/balance): each of them gets the part the host keeps of it
+    int recipients = 1 + (int)near.size();
+    int32_t part = balance::Share(paid, recipients);
+    balance::TakeBack(paid, part);
+    if (part != paid)
+        ui::TheChat().AddSystem(Format(TR("Деньги курьера: $%d из $%d%s.", "Courier cash: $%d of $%d%s."), part, paid,
+                                       balance::ShareNote(recipients).c_str()));
+    for (uint8_t id : near) {
+        if (part <= 0) break;
         Writer w(proto::G_MONEY);
         w.U8(kMoneyShare);
         w.U8(id);
-        w.I32(paid);
+        w.I32(part);
         Net().Send(proto::CH_RELIABLE, w);
-        LOGI("Big Smoke's courier paid $%d: the same to player %d", paid, id);
+        LOGI("Big Smoke's courier paid $%d: $%d to player %d", paid, part, id);
     }
 }
 
