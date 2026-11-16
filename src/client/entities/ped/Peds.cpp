@@ -339,6 +339,19 @@ bool HasLastingBodyAnim(CPed* ped) {
 // player after SET_CHAR_HEALTH 1000; LS's sparring pair, going for a player in its corner, keeps 100) and, after the
 // first win, a new trainer for the lesson (widescreen, nobody else within 8 m). Kept local as the gym's other people,
 // ours boxed nobody in the other game ("дерёшься с невидимым", 28.10).
+// A copy that died here is alive again in its owner's game: a paramedic revived it there. Half a second of such states,
+// not one late state of before its death. The copy stayed dead for good (deadApplied was never taken back): it got its
+// owner's health, place and animations as a dead ped, slid about lying down, took none of our hits, and when the
+// animations replayed on it had ended it had none left: the game crashed in CPed::PlayFootSteps (0x5E5815, 16.11).
+bool Revived(NetPed& np, const PedSyncState& st, uint64_t now) {
+    if ((st.flags & PedSyncState::F_DEAD) || st.health == 0) {
+        np.aliveSinceMs = 0;
+        return false;
+    }
+    if (!np.aliveSinceMs) np.aliveSinceMs = now;
+    return now - np.aliveSinceMs >= 500;
+}
+
 bool GymOpponent(CPed* ped, CPed* me) {
     void* m = RunningMission();
     if (!me || !m || _strnicmp((const char*)m + 0x08, "gym", 3)) return false;
@@ -1082,7 +1095,12 @@ void Peds::ApplyMirror(NetPed& np) {
         np.blip = 0;
     }
     if (!np.ped) {
-        if (np.deadApplied) return;  // a body the game took away: made again, it stood up and died once more
+        if (np.deadApplied) {
+            if (!Revived(np, st, now)) return;  // a body the game took away: made again, it stood up and died once more
+            np.deadApplied = false;             // revived in its owner's game: it is made again as any copy
+            np.aliveSinceMs = 0;
+            LOGI("Mirror %04X is alive again in its owner's game: its copy is made again", np.netId);
+        }
         if (now - np.lastTaskMs >= 100) {
             np.lastTaskMs = now;
             SpawnMirror(np);
@@ -1118,6 +1136,7 @@ void Peds::ApplyMirror(NetPed& np) {
         else ped->Flags() |= 0x80u;
     }
     if (st.flags & PedSyncState::F_DEAD) {
+        np.aliveSinceMs = 0;
         if (!np.deadApplied) {
             np.deadApplied = true;
             // dead on foot in its game (a cyclist shot falls off its bike there), still riding here: it died in the seat,
@@ -1152,6 +1171,22 @@ void Peds::ApplyMirror(NetPed& np) {
             SetEntityPosition(ped, st.pos);
             ped->MoveSpeed() = st.vel * (1.0f / 50.0f);
         }
+        return;
+    }
+    if (np.deadApplied) {
+        // Revived in its owner's game (see Revived). The body here is dead to the game in its state, its tasks and its
+        // animations: a new copy takes its place, as one that comes into view.
+        if (!Revived(np, st, now)) return;
+        Cmd(0x009B).I(np.handle).Run();  // DELETE_CHAR
+        m_byPtr.erase(ped);
+        np.ped = nullptr;
+        np.handle = -1;
+        np.deadApplied = np.dying = np.animFull = false;
+        np.aliveSinceMs = 0;
+        np.animBlock = np.baseBlock = kNoAnim;
+        np.gunMode = 0;
+        np.lastTaskMs = 0;
+        LOGI("Mirror %04X is alive again in its owner's game: its body here makes way for a new copy", np.netId);
         return;
     }
     ped->Health() = std::max<float>(1.0f, st.health);
