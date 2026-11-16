@@ -6,7 +6,8 @@ SA:COOP build script (llvm-mingw, i686).
     python tools/build.py client       build only coop.dll
     python tools/build.py --debug      build with -O0
     python tools/build.py --clean      remove the build output (build/release, build/debug)
-    python tools/build.py dist         build everything and assemble dist/ (ready-to-play package)
+    python tools/build.py dist         build everything and assemble dist/: SA-COOP.zip (the mod), SA-COOP-extras.zip
+                                       (skin packs and voices, optional) and coop.pdb (for reading crash logs)
     python tools/build.py --with DIR   also compile the .cpp files of DIR into coop.dll (the test bot)
     python tools/build.py testclient   build coop-test-client.exe, the headless player of tools/test_server.py
 
@@ -246,31 +247,57 @@ def link_target(t, debug, objs, dep_objs):
     return True
 
 
+# The package's big folders the mod runs without (the F4 window's skins, the voices of a player in a skin): 650 MB that
+# change rarely, against 6 MB of the mod itself. They go in an archive of their own, unpacked over the game folder too.
+EXTRAS = ("coop/skinpacks/", "coop/voices/")
+
+
 def assemble_dist(debug):
-    """dist/SA-COOP mirrors the install layout (copied over the game folder) + a zip of it."""
+    """dist/SA-COOP and dist/SA-COOP-extras mirror the install layout (copied over the game folder) + a zip of each;
+    dist/coop.pdb is the client's symbols, for whoever reads a crash log of this very build."""
     src = BUILD / ("debug" if debug else "release") / "bin"
     dist = ROOT / "dist" / "SA-COOP"
+    extras = ROOT / "dist" / "SA-COOP-extras"
     shutil.rmtree(dist, ignore_errors=True)
+    shutil.rmtree(extras, ignore_errors=True)
     (dist / "coop").mkdir(parents=True)
+    extras.mkdir(parents=True)
     shutil.copy2(src / "coop.dll", dist / "coop.asi")  # any ASI loader picks up *.asi
-    for name in ("coop.pdb", "coop-server.exe"):
-        if (src / name).exists():
-            shutil.copy2(src / name, dist / "coop" / name)
+    if (src / "coop-server.exe").exists():
+        shutil.copy2(src / "coop-server.exe", dist / "coop" / "coop-server.exe")
+        # server.ini and balance_exclude.ini as the server itself writes them at a first start, every key at its preset:
+        # in the package they can be edited before that start. The server writes them: one text for both, never two.
+        if os.name == "nt":
+            r = subprocess.run([str(src / "coop-server.exe"), "--write-config", str(dist / "coop" / "server.ini")],
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                print(f"dist: coop-server.exe --write-config failed ({r.returncode}): the package has no server.ini")
+        else:
+            print("dist: no server.ini in the package (coop-server.exe does not run on this system to write it)")
+    if (src / "coop.pdb").exists():
+        shutil.copy2(src / "coop.pdb", ROOT / "dist" / "coop.pdb")  # beside the archives, in neither
     (dist / "coop" / "loader").mkdir()
     shutil.copy2(src / "vorbisFile.dll", dist / "coop" / "loader" / "vorbisFile.dll")  # install.bat puts it in place
     for f in (ROOT / "package").rglob("*"):
         if f.is_file():
-            dst = dist / f.relative_to(ROOT / "package")
+            rel = f.relative_to(ROOT / "package")
+            dst = (extras if rel.as_posix().startswith(EXTRAS) else dist) / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(f, dst)
+    # the skins' authors are named in the instructions: they go with the skins as well
+    for f in (ROOT / "package").glob("*.txt"):
+        shutil.copy2(f, extras / f.name)
     licenses = dist / "coop" / "licenses"  # the binaries carry ENet and MinHook: their notices go along
     licenses.mkdir()
     shutil.copy2(ROOT / "LICENSE", licenses / "SA-COOP.txt")
     shutil.copy2(ROOT / "third_party" / "enet" / "LICENSE", licenses / "ENet.txt")
     shutil.copy2(ROOT / "third_party" / "minhook" / "LICENSE.txt", licenses / "MinHook.txt")
     shutil.copy2(ROOT / "third_party" / "fontawesome" / "LICENSE.txt", licenses / "FontAwesome.txt")  # the microphone icon
-    archive = shutil.make_archive(str(ROOT / "dist" / "SA-COOP"), "zip", dist)
-    print(f"dist assembled in {dist.relative_to(ROOT)} and {Path(archive).relative_to(ROOT)}")
+    for folder in (dist, extras):
+        archive = Path(shutil.make_archive(str(folder), "zip", folder))
+        print(f"dist: {archive.relative_to(ROOT)}, {archive.stat().st_size / 1e6:.1f} MB")
+    if (ROOT / "dist" / "coop.pdb").exists():
+        print("dist: dist\\coop.pdb, for crash logs of this build")
 
 
 def main():
