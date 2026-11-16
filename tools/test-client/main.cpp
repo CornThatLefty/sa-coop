@@ -61,7 +61,8 @@ static void OnService(uint8_t id, Reader& r, std::vector<uint8_t>& world, uint32
         bool ok = w.Read(r);
         std::string players;
         for (auto& p : w.players) players += Format(" %d:%s%s", p.id, p.name.c_str(), p.isHost ? "*" : "");
-        Say(Format("EVT WELCOME ok=%d id=%d host=%d world=%d players=[%s ]", ok, w.yourId, w.hostId, w.worldAvailable, players.c_str()));
+        Say(Format("EVT WELCOME ok=%d id=%d host=%d world=%d players=[%s ] dedicated=%d game=%08X version=%u", ok, w.yourId, w.hostId,
+                   w.worldAvailable, players.c_str(), w.dedicated, w.gameId, w.worldVersion));
         break;
     }
     case S_REJECT:
@@ -99,8 +100,11 @@ static void OnService(uint8_t id, Reader& r, std::vector<uint8_t>& world, uint32
         uint32_t size = r.U32();
         worldCrc = r.U32();
         std::string label = r.Str(128);
+        uint32_t version = r.Remaining() >= 4 ? r.U32() : 0;
         world.assign(size <= 8u * 1024 * 1024 ? size : 0, 0);
-        Say(Format("EVT WORLD_BEGIN size=%u crc=%08X label=%s", size, worldCrc, label.c_str()));
+        for (char& c : label)
+            if (c == ' ') c = '_';
+        Say(Format("EVT WORLD_BEGIN size=%u crc=%08X label=%s version=%u", size, worldCrc, label.c_str(), version));
         break;
     }
     case S_WORLD_CHUNK: {
@@ -114,7 +118,12 @@ static void OnService(uint8_t id, Reader& r, std::vector<uint8_t>& world, uint32
                    Crc32(world.data(), world.size()) == worldCrc));
         break;
     case S_WORLD_NONE: Say("EVT WORLD_NONE"); break;
-    case S_HOST_CHANGED: Say(Format("EVT HOST id=%d", r.U8())); break;
+    case S_HOST_CHANGED: {
+        uint8_t host = r.U8();
+        uint32_t game = r.Remaining() >= 4 ? r.U32() : 0;
+        Say(Format("EVT HOST id=%d game=%08X", host, game));
+        break;
+    }
     case S_PINGS: break;
     case S_WORLD_WANTED: Say("EVT WORLD_WANTED"); break;
     case S_INVITE: Say(Format("EVT INVITE %s", r.Str(32).c_str())); break;

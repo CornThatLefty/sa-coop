@@ -48,11 +48,11 @@ enum MsgId : uint8_t {
     S_PLAYER_LEAVE = 23,     // u8 id, u8 reason
     S_CHAT = 24,             // u8 fromId (255 = server), u32 rgba, str text, str textEn (the server's own texts)
     S_PROFILE = 25,          // bytes profile (empty when the player is new), u32 game it belongs to
-    S_WORLD_BEGIN = 26,      // u32 size, u32 crc, str label
+    S_WORLD_BEGIN = 26,      // u32 size, u32 crc, str label, u32 the world's version on the server
     S_WORLD_CHUNK = 27,      // u32 offset, bytes
     S_WORLD_END = 28,
     S_WORLD_NONE = 29,       // the host has not uploaded a save yet
-    S_HOST_CHANGED = 30,     // u8 newHostId
+    S_HOST_CHANGED = 30,     // u8 newHostId, u32 the game whose profiles the server gives (C_GAME_ID as it keeps it)
     S_PINGS = 31,            // u8 count, {u8 id, u16 ping}
     S_KICKED = 32,           // str reason, str reasonEn
     S_WORLD_WANTED = 33,     // to the host: a partner needs the world, please upload a fresh snapshot
@@ -327,6 +327,9 @@ struct Welcome {
     bool partnerTeleport = true;  // the partners may use /tp and /tphere (the host's choice too)
     bool sharedLife = false;      // a partner's death fails the host's story mission (the host's choice too)
     bool partnerCheats = true;    // the partners' cheat codes work (the host's choice too; 0.3.3's servers send none)
+    bool dedicated = false;       // a server of its own: the world it stores is the game's, whoever hosts
+    uint32_t gameId = 0;          // the game whose profiles the server gives (C_GAME_ID as it keeps it)
+    uint32_t worldVersion = 0;    // the stored world's version (0: none); it counts up with every world that replaces it
     std::vector<PlayerEntry> players;  // already connected players (excluding you)
 
     void Write(Writer& w) const {
@@ -346,6 +349,9 @@ struct Welcome {
         w.Bool(partnerTeleport);
         w.Bool(sharedLife);
         w.Bool(partnerCheats);
+        w.Bool(dedicated);
+        w.U32(gameId);
+        w.U32(worldVersion);
     }
     bool Read(Reader& r) {
         yourId = r.U8();
@@ -367,6 +373,11 @@ struct Welcome {
         partnerTeleport = r.Bool();
         sharedLife = r.Bool();
         partnerCheats = r.Remaining() ? r.Bool() : true;
+        if (r.Remaining()) {
+            dedicated = r.Bool();
+            gameId = r.U32();
+            worldVersion = r.U32();
+        }
         return r.Ok();
     }
 };

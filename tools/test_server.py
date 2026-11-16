@@ -22,6 +22,7 @@ import sys
 import tempfile
 import threading
 import time
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -193,6 +194,11 @@ class Player:
         b["overrides"] = m[4].split()
         return b
 
+    def settle(self):
+        """Returns once the server has handled what this player sent so far (its answer to /players comes after)."""
+        self.send("chat /players")
+        self.expect(rf"EVT CHAT from=255 \[\d+\] {self.name}[ ,]")
+
     def quit(self):
         self._end("quit")
 
@@ -300,6 +306,367 @@ def protocol_mismatch_is_rejected(make):
     s = make()
     p = s.join("Old", protocol=63, expect_welcome=False)
     p.expect(r"EVT REJECT your version of the mod differs")
+
+
+# ---- the world, the roles, the profiles
+IN_GAME = "status 2"
+
+
+def make_world(server, name, seed, size=4096):
+    """A file to upload as a world: its path and its crc as the players print it."""
+    data = bytes((seed * 31 + i * 7 + (i >> 8)) & 0xFF for i in range(size))
+    path = server.dir / name
+    path.write_bytes(data)
+    return path, f"{zlib.crc32(data) & 0xFFFFFFFF:08X}"
+
+
+def got_world(player, crc, label=None, timeout=5.0):
+    m = player.expect(r"EVT WORLD_BEGIN size=\d+ crc=([0-9A-F]{8}) label=(\S*) version=(\d+)", timeout)
+    check(m[1] == crc, f"{player.name} got the world {m[1]}, not {crc}")
+    if label is not None:
+        check(m[2] == label, f"{player.name} got the world labelled {m[2]!r}, not {label!r}")
+    player.expect(r"EVT WORLD_END .* ok=1")
+    return int(m[3])
+
+
+DEDICATED = "dedicated = 1\nsnapshot_minutes = 0\n"
+
+
+@test
+def host_role_goes_to_the_first_and_on_when_it_leaves(make):
+    s = make()
+    a = s.join("Alice")
+    b = s.join("Bob")
+    check(a.host == a.id and b.host == a.id, "the first player is not the host")
+    a.quit()
+    b.expect(rf"EVT LEAVE id={a.id} reason=0")
+    b.expect(rf"EVT HOST id={b.id}")
+
+
+@test
+def world_goes_from_the_host_to_a_partner(make):
+    s = make()
+    a = s.join("Alice")
+    a.send(IN_GAME)
+    path, crc = make_world(s, "a.b", 1)
+    b = s.join("Bob")
+    b.send("request")
+    a.expect(r"EVT WORLD_WANTED")  # the host's game is asked for a fresh one
+    a.send(f"upload {path} host_snapshot")
+    got_world(b, crc, "host_snapshot")
+    check((s.data / "world" / "world.b").read_bytes() == path.read_bytes(), "world.b is not the uploaded world")
+
+
+@test
+def profiles_are_kept_per_game(make):
+    s = make()
+    a = s.join("Alice")
+    b = s.join("Bob")
+    b.expect(r"EVT PROFILE size=0 game=00000000")
+    a.send("gameid 1234ABCD")
+    b.expect(r"EVT PROFILE size=0 game=1234ABCD")
+    b.send("profile 00000000 stale")      # sent before the switch reached it: another game's
+    b.send("profile 1234ABCD hello")
+    s.wait_log(r"Bob от другой игры")
+    time.sleep(0.5)                        # the writer's thread
+    b.quit()
+    b2 = s.join("Bob")
+    b2.expect(r"EVT PROFILE size=5 game=1234ABCD text=hello")
+    check((s.data / "profiles" / "1234ABCD" / "bob.bin").read_bytes() == b"hello", "the profile's file")
+
+
+@test
+def game_id_survives_a_restart(make):
+    """The stored world's game is known from the first join on after a restart, not when a host says it again."""
+    s = make()
+    a = s.join("Alice")
+    a.send(IN_GAME)
+    path, crc = make_world(s, "a.b", 2)
+    a.send(f"upload {path} host_snapshot")
+    a.send("gameid 0BADF00D")
+    b = s.join("Bob")
+    b.send("profile 0BADF00D kept")
+    time.sleep(0.6)
+    a.quit(), b.quit()
+    s.restart()
+    b2 = s.join("Bob", expect_welcome=False)
+    b2.expect(r"EVT WELCOME ok=1 .* game=0BADF00D version=1")
+    b2.expect(r"EVT PROFILE size=4 game=0BADF00D text=kept")
+
+
+@test
+def waiters_get_the_stored_world_when_the_host_leaves(make):
+    s = make()
+    a = s.join("Alice")
+    a.send(IN_GAME)
+    path, crc = make_world(s, "a.b", 3)
+    a.send(f"upload {path} host_snapshot")
+    s.wait_log(r"обновил сохранение мира")
+    b = s.join("Bob")
+    b.send("request")
+    a.expect(r"EVT WORLD_WANTED")
+    a.quit()  # it never answers
+    b.expect(rf"EVT HOST id={b.id}")
+    got_world(b, crc)
+
+
+@test
+def a_repeated_world_request_is_answered(make):
+    """Who stands in the waiters' list and asks again gets an answer again (it was dropped)."""
+    s = make()
+    a = s.join("Alice")  # the host stays in its menu
+    b = s.join("Bob")
+    b.send("request")
+    b.expect(r"EVT WORLD_NONE")
+    b.send("request")
+    b.expect(r"EVT WORLD_NONE")
+    path, crc = make_world(s, "a.b", 4)
+    a.send(IN_GAME)
+    a.expect(r"EVT WORLD_WANTED")
+    a.send(f"upload {path} host_snapshot")
+    got_world(b, crc)
+    b.refuse(r"EVT WORLD_BEGIN")  # once: it stood in the list once
+
+
+@test
+def password_cooldown_after_five_wrong_ones(make):
+    s = make("password = right\n")
+    for i in range(5):
+        s.join(f"Guess{i}", password="wrong", expect_welcome=False).expect(r"EVT REJECT wrong password")
+    s.join("Guess5", password="wrong", expect_welcome=False).expect(r"EVT REJECT too many wrong passwords.*in (\d+) s")
+    s.join("Owner", password="right", expect_welcome=False).expect(r"EVT REJECT too many wrong passwords")
+    s.wait_log(r"5 wrong passwords from 127\.0\.0\.1: it waits 60 s")
+
+
+@test
+def right_password_joins(make):
+    s = make("password = right\n")
+    for i in range(3):
+        s.join(f"Guess{i}", password="wrong", expect_welcome=False).expect(r"EVT REJECT wrong password")
+    s.join("Owner", password="right")
+
+
+# ---- dedicated mode
+@test
+def dedicated_world_is_kept_from_a_game_that_does_not_play_it(make):
+    """The world lock: a host that joined from a game of its own does not replace the stored world."""
+    s = make(DEDICATED, start=False)
+    seed, seed_crc = make_world(s, "seed.b", 10)
+    s.args += ["--world", str(seed)]
+    s.start()
+    a = s.join("Alice", expect_welcome=False)
+    a.expect(r"EVT WELCOME ok=1 .* world=1 .* dedicated=1 game=00000000 version=1")
+    a.send(IN_GAME)
+    own, own_crc = make_world(s, "own.b", 11)
+    a.send(f"upload {own} host_snapshot")
+    a.expect(r"EVT CHAT from=255 The server kept its world")
+    a.send(f"upload {own} progress")  # a mission passed in its own game: its own game still
+    a.expect(r"EVT CHAT from=255 The server kept its world")
+    b = s.join("Bob")
+    b.send("request")
+    a.expect(r"EVT WORLD_WANTED")
+    a.send("keep")
+    check(got_world(b, seed_crc) == 1, "the stored world's version")
+    # the host loads the stored world: from now on its game is that world, and its progress replaces it
+    a.send("request")
+    got_world(a, seed_crc)
+    b.send(IN_GAME)
+    nxt, nxt_crc = make_world(s, "next.b", 12)
+    a.send(f"upload {nxt} progress")
+    check(got_world(b, nxt_crc, "progress") == 2, "the new world's version")
+    check((s.data / "world" / "world.b.1").read_bytes() == seed.read_bytes(), "the replaced world is not backup 1")
+
+
+@test
+def dedicated_world_is_sent_while_the_host_sits_in_the_menu(make):
+    s = make(DEDICATED, start=False)
+    seed, seed_crc = make_world(s, "seed.b", 13)
+    s.args += ["--world", str(seed)]
+    s.start()
+    s.join("Alice")  # the host, in its menu
+    b = s.join("Bob")
+    b.send("request")
+    got_world(b, seed_crc)
+
+
+@test
+def dedicated_seed_does_not_replace_a_stored_world(make):
+    s = make(DEDICATED, start=False)
+    seed, seed_crc = make_world(s, "seed.b", 14)
+    s.args += ["--world", str(seed)]
+    s.start()
+    s.stop()
+    other, other_crc = make_world(s, "other.b", 15)
+    s.args[-1] = str(other)
+    s.start()
+    a = s.join("Alice")
+    a.send("request")
+    got_world(a, seed_crc)
+    s.wait_log(r"--world and --new-game are ignored")
+
+
+@test
+def admins_and_acceptworld(make):
+    """A named admin with the password lets the host's own game replace the world; nobody else can."""
+    s = make(DEDICATED + "admins = Alice\nadmin_password = secret\n", start=False)
+    seed, seed_crc = make_world(s, "seed.b", 20)
+    s.args += ["--world", str(seed)]
+    s.start()
+    bob = s.join("Bob")  # the host: no admin by it
+    bob.send(IN_GAME)
+    alice = s.join("Alice")
+    own, own_crc = make_world(s, "own.b", 21)
+    bob.send("chat /acceptworld")
+    bob.expect(r"EVT CHAT from=255 Only an admin can replace")
+    bob.send("chat /admin secret")  # the password without the name
+    bob.expect(r"EVT CHAT from=255 Wrong admin password")
+    alice.send("chat /acceptworld")  # the name without the password
+    alice.expect(r"EVT CHAT from=255 Only an admin can replace")
+    alice.send("chat /admin nope")
+    alice.expect(r"EVT CHAT from=255 Wrong admin password")
+    alice.send("chat /admin secret")
+    alice.expect(r"EVT CHAT from=255 Admin rights granted")
+    alice.send("chat /acceptworld")
+    bob.expect(r"EVT WORLD_WANTED")
+    alice.expect(r"EVT CHAT from=255 The next save of Bob's game replaces")
+    bob.send("gameid 00C0FFEE")
+    bob.send(f"upload {own} host_snapshot")
+    s.wait_log(r"версия 2")
+    alice.send("request")
+    bob.expect(r"EVT WORLD_WANTED")  # the host is in the game: a fresh one is asked for first
+    bob.send("keep")
+    check(got_world(alice, own_crc) == 2, "the accepted world's version")
+    # the world's game came with it, and the next upload of that game needs no admin
+    carol = s.join("Carol", expect_welcome=False)
+    carol.expect(r"EVT WELCOME ok=1 .* game=00C0FFEE version=2")
+    nxt, nxt_crc = make_world(s, "next.b", 22)
+    bob.send(f"upload {nxt} progress")
+    s.wait_log(r"версия 3")
+    # an earlier world comes back
+    alice.send("chat /restoreworld")
+    alice.expect(r"EVT CHAT from=255 Earlier worlds: 1, 2 ")
+    alice.send(IN_GAME)
+    alice.send("chat /restoreworld 2")
+    check(got_world(alice, seed_crc, "backup_2") == 4, "the restored world's version")
+    got_world(bob, seed_crc, "backup_2")
+    bob.send("chat /restoreworld 1")
+    bob.expect(r"EVT CHAT from=255 Only an admin can restore")
+
+
+@test
+def admin_without_password_is_by_name(make):
+    s = make(DEDICATED + "admins = alice, Dave\n")
+    bob = s.join("Bob")
+    alice = s.join("Alice")
+    alice.send("chat /host Alice")
+    for p in (bob, alice):
+        p.expect(rf"EVT HOST id={alice.id}")
+    bob.send("chat /host Bob")
+    bob.expect(r"EVT CHAT from=255 Only an admin can pass")
+    bob.send(f"chat /kick Alice")
+    bob.expect(r"EVT CHAT from=255 Only the host can kick")  # the host's role gives no rights on a dedicated server
+    alice.send("chat /kick Bob away")
+    bob.expect(r"EVT KICKED away")
+
+
+@test
+def newgame_clears_the_world_and_keeps_a_backup(make):
+    s = make(DEDICATED + "admins = Alice\n", start=False)
+    seed, seed_crc = make_world(s, "seed.b", 30)
+    s.args += ["--world", str(seed)]
+    s.start()
+    a = s.join("Alice")
+    a.send(IN_GAME)
+    a.send("newgame")  # its game started a new story by itself: the world stays
+    a.expect(r"EVT CHAT from=255 The server keeps the shared world")
+    a.send("chat /newgame")
+    a.expect(r"EVT CHAT from=255 An admin started a new story")
+    check(not (s.data / "world" / "world.b").exists(), "world.b is still there")
+    check((s.data / "world" / "world.b.1").read_bytes() == seed.read_bytes(), "the cleared world is not backup 1")
+    b = s.join("Bob", expect_welcome=False)
+    b.expect(r"EVT WELCOME ok=1 .* world=0 .* version=0")
+    fresh, fresh_crc = make_world(s, "fresh.b", 31)
+    a.send("gameid 0000BEEF")
+    a.send(f"upload {fresh} host_snapshot")  # the first world of an empty server is taken
+    b.send("request")
+    a.expect(r"EVT WORLD_WANTED")
+    a.send("keep")
+    got_world(b, fresh_crc)
+    s.join("Carol", expect_welcome=False).expect(r"EVT WELCOME ok=1 .* game=0000BEEF")
+
+
+@test
+def dedicated_game_id_is_not_overwritten_by_a_new_host(make):
+    """A promoted partner's game knows no game number (0) or another one: the server keeps the world's."""
+    s = make(DEDICATED)
+    a = s.join("Alice")
+    a.send(IN_GAME)
+    first, crc = make_world(s, "first.b", 40)
+    a.send("gameid AAAA0001")
+    a.send(f"upload {first} host_snapshot")
+    s.wait_log(r"версия 1")
+    b = s.join("Bob")
+    b.expect(r"EVT PROFILE size=0 game=AAAA0001")
+    a.quit()
+    b.expect(rf"EVT HOST id={b.id} game=AAAA0001")
+    b.send("gameid 0")
+    b.send("gameid BBBB0002")
+    b.refuse(r"EVT PROFILE")
+    s.join("Carol", expect_welcome=False).expect(r"EVT WELCOME ok=1 .* game=AAAA0001")
+    s.restart()
+    s.join("Dave", expect_welcome=False).expect(r"EVT WELCOME ok=1 .* game=AAAA0001")
+
+
+@test
+def host_role_goes_to_who_plays_the_newest_world(make):
+    s = make(DEDICATED, start=False)
+    seed, seed_crc = make_world(s, "seed.b", 50)
+    s.args += ["--world", str(seed)]
+    s.start()
+    a = s.join("Alice")
+    c = s.join("Carol")  # here longer than Bob, in the game, but with no world of the server's
+    b = s.join("Bob")
+    c.send(IN_GAME)
+    b.send(IN_GAME)
+    b.send("request")
+    got_world(b, seed_crc)
+    c.settle()
+    a.quit()
+    for p in (b, c):
+        p.expect(rf"EVT HOST id={b.id}")
+
+
+@test
+def new_host_behind_the_world_gets_it(make):
+    s = make(DEDICATED, start=False)
+    seed, seed_crc = make_world(s, "seed.b", 51)
+    s.args += ["--world", str(seed)]
+    s.start()
+    a = s.join("Alice")
+    b = s.join("Bob")
+    b.send(IN_GAME)
+    b.settle()
+    a.quit()
+    b.expect(rf"EVT HOST id={b.id}")
+    got_world(b, seed_crc)
+
+
+@test
+def dedicated_host_is_asked_for_snapshots(make):
+    s = make("dedicated = 1\nsnapshot_minutes = 0.02\n", start=False)  # every 1.2 s
+    seed, seed_crc = make_world(s, "seed.b", 60)
+    s.args += ["--world", str(seed)]
+    s.start()
+    a = s.join("Alice")
+    a.send(IN_GAME)
+    a.refuse(r"EVT WORLD_WANTED", 2.0)  # its game does not play the stored world: its snapshot would be refused
+    a.send("request")
+    got_world(a, seed_crc)
+    a.expect(r"EVT WORLD_WANTED", 4.0)
+    snap, snap_crc = make_world(s, "snap.b", 61)
+    a.send(f"upload {snap} host_snapshot")
+    s.wait_log(r"версия 2")
+    a.expect(r"EVT WORLD_WANTED", 4.0)  # and again
 
 
 def main():
