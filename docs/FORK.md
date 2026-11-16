@@ -15,6 +15,7 @@ All players and the server must run the same fork build: the protocol version di
 - [Server additions](#server-additions)
 - [Tests without the game](#tests-without-the-game)
 - [Engine addresses added by the fork](#engine-addresses-added-by-the-fork)
+- [Fixes to inherited behaviour](#fixes-to-inherited-behaviour)
 - [Release files](#release-files)
 - [Known issues and limits](#known-issues-and-limits)
 
@@ -211,6 +212,22 @@ All for `gta_sa.exe` 1.0 US, taken from gta-reversed and checked in the executab
 | `0xC0BBE8` | `CPedType::ms_apPedTypes` (pointer, 0x14 bytes per type) | `CPedType::SetPedTypeAsAcquaintance` at `0x608E20` |
 
 No address is marked `TODO(verify)`.
+
+## Fixes to inherited behaviour
+
+**A revived ped's copy (test build 2).** A copy that died stayed dead for good in the other games: `NetPed::deadApplied`
+was never taken back. When a paramedic revived the ped in its owner's game, its copy elsewhere received the owner's
+health, place and animations as a dead ped: it slid about lying down, took none of the local player's hits, and once
+the replayed animations ended it had none left. `CPed::PlayFootSteps` (`0x5E57F0`) reads the first animation of a
+ped's clump unchecked and crashed at `0x5E5815` reading address `0x2C`.
+
+- `Peds::ApplyMirror` now takes a dead copy whose owner's states say alive for half a second as revived: the body is
+  deleted and a new copy is made, as for a ped that comes into view. A body the game had already removed is made again
+  the same way.
+- The call of `CPed::PlayFootSteps` in `CPed::ProcessControl` (`0x5E92C8`, its only caller) goes through a check: a ped
+  whose clump has no animation makes no steps. `coop.log` says so the first five times.
+
+Found from a tester's `crash.log`; not reproduced by the author. Upstream has the same code.
 
 ## Release files
 

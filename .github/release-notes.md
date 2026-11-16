@@ -1,6 +1,15 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 1: co-op balance (combat scaling, shop prices, split payouts).
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 2: co-op balance (combat scaling, shop prices, split payouts)
+and a crash fix.
 
-Every player needs this build: it does not connect to upstream 0.3.4 or to earlier fork builds (protocol 64).
+It does not connect to upstream 0.3.4 (protocol 64). It plays with test build 1, but the crash fix works only in the
+game of a player who has this build, so every player should install it.
+
+## Fixed since test build 1
+
+- **Crash after a paramedic revives a ped.** In another player's game the revived ped's copy stayed dead: it slid about
+  lying down, took no hits, and the game crashed soon after (`gta_sa.exe` at `005E5815`). The copy now comes back to
+  life with its owner's ped, and a ped left with no animation no longer crashes the game.
+  To check: kill a passer-by near another player, wait for the ambulance, attack the revived ped in both games.
 
 ## Files
 
@@ -20,7 +29,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.1` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.2` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 
