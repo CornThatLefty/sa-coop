@@ -245,11 +245,12 @@ host choice by world version, and scheduled snapshot requests.
 
 ## Engine addresses added by the fork
 
-All for `gta_sa.exe` 1.0 US, taken from gta-reversed and checked in the executable's disassembly.
+All for `gta_sa.exe` 1.0 US, taken from gta-reversed and checked in the executable's disassembly with
+`tools/re/exe.py` (set `GTA_SA_EXE` to the executable's path; it needs the `capstone` Python package).
 
 | Address | What | Checked by |
 | --- | --- | --- |
-| `0x49AD50` | `CShopping::GetPrice(key)`, cdecl | Its body reads `ms_numPrices` and `ms_prices`; `CShopping::Buy` calls it at `0x49C000` |
+| `0x49AD50` | `CShopping::GetPrice(key)`, cdecl | Its body reads `ms_numPrices` and `ms_prices`; called from `CShopping::Buy` at `0x49C000` and from the script command at `0x46EBBE`, nowhere else |
 | `0xA9A7C8` | `CShopping::ms_priceSectionLoaded` | Written by `LoadPrices` and `RemoveLoadedPrices` |
 | key 48 | `WEAPON_ARMOUR` as a `Weapons` item | `cmp esi, 0x30` in `CShopping::Buy` at `0x49C20D` |
 | `0x610770` | `CPopCycle::UpdatePercentages()`, cdecl, no arguments | Called once from `CPopCycle::Update` at `0x610CAB` |
