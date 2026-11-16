@@ -16,6 +16,7 @@ All players and the server must run the same fork build: the protocol version di
 - [Dedicated mode](#dedicated-mode)
 - [Tests without the game](#tests-without-the-game)
 - [Engine addresses added by the fork](#engine-addresses-added-by-the-fork)
+- [Release files](#release-files)
 - [Known issues and limits](#known-issues-and-limits)
 
 ## Balance settings and how they reach the players
@@ -260,6 +261,24 @@ All for `gta_sa.exe` 1.0 US, taken from gta-reversed and checked in the executab
 | `0xC0BBE8` | `CPedType::ms_apPedTypes` (pointer, 0x14 bytes per type) | `CPedType::SetPedTypeAsAcquaintance` at `0x608E20` |
 
 No address is marked `TODO(verify)`.
+
+## Release files
+
+Upstream ships one archive of about 515 MB. `python tools/build.py dist` in the fork writes three files, and a tagged
+release carries all three:
+
+| File | Contents |
+| --- | --- |
+| `dist/SA-COOP.zip` | The mod: `coop.asi`, `coop\coop-server.exe`, `coop\server.ini`, `coop\balance_exclude.ini`, the ASI loader, the animation packs, `install.bat`, licenses. About 6 MB |
+| `dist/SA-COOP-extras.zip` | `coop\skinpacks` and `coop\voices` from `package/`, about 505 MB zipped. The mod runs without them: the F4 window then lists only the game's own people, and a player in a skin speaks with CJ's voice |
+| `dist/coop.pdb` | The client's symbols for reading a `crash.log` of that build. Not installed |
+
+Both archives unpack over the game folder. The folders that go to the extras are listed in `EXTRAS` of `tools/build.py`.
+
+`coop\server.ini` and `coop\balance_exclude.ini` are in the package so that the settings can be edited before the
+server's first start. The build makes them by running `coop-server.exe --write-config <path>`, which writes the files
+exactly as a first start does, so the package and the server never hold two versions of the text. Unpacking the
+archive over an earlier install replaces both files; skip them to keep edited ones.
 
 ## Known issues and limits
 

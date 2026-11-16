@@ -2,12 +2,27 @@ Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 1: co-op balance (combat 
 
 Every player needs this build: it does not connect to upstream 0.3.4 or to earlier fork builds (protocol 64).
 
+## Files
+
+| File | Size | Contents |
+| --- | --- | --- |
+| `SA-COOP.zip` | 6 MB | The mod: `coop.asi`, the server with its `server.ini`, the ASI loader, the animation packs. Every player needs it |
+| `SA-COOP-extras.zip` | 505 MB | Optional: skin packs for the F4 window and voices for a player in a skin. Unchanged from upstream 0.3.4 |
+| `coop.pdb` | 20 MB | Not for playing. Symbols for reading a `crash.log` of this build |
+
+Either every player installs the extras or none: a pack's skin is not shown to a player without the pack.
+
 ## Install
 
-1. Unpack `SA-COOP.zip` over the game folder, replacing files. `coop\server.ini` and `coop\coop.ini` are kept.
-2. The F9 window shows `v0.3.4-fork.1` in its corner when the build is in place.
-3. The host starts a game from F9 as before. On its first start the server adds a `[balance]` section to
-   `coop\server.ini` and writes `coop\balance_exclude.ini`.
+1. Unpack `SA-COOP.zip` over the game folder, replacing files. A first install also runs `install.bat` from the game
+   folder once.
+2. `coop\server.ini` and `coop\balance_exclude.ini` in the zip hold every setting at its preset, the `[balance]`
+   section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
+   to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
+3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
+4. The F9 window shows `v0.3.4-fork.1` in its corner when the build is in place.
+5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
+   section from the server on the first start.
 
 ## Settings
 
