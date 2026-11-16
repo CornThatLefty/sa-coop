@@ -917,6 +917,21 @@ void __fastcall HookForAllFrames(void* data, void* edx, void* callback, void* up
     g_origForAllFrames(data, edx, callback, update);
 }
 
+// CPed::PlayFootSteps (0x5E57F0, called once a frame from CPed::ProcessControl at 0x5E92C8) takes the first animation of
+// the ped's clump with no check, as the velocity extraction above does: a ped left with none crashed the game reading
+// address 0x2C (0x5E5815, 16.11: the copy of a ped a paramedic had revived in its owner's game). A ped with no animation
+// makes no steps.
+using PlayFootStepsFn = void(__fastcall*)(game::CPed*, void*);
+PlayFootStepsFn g_origPlayFootSteps = nullptr;
+void __fastcall HookPlayFootSteps(game::CPed* ped, void* edx) {
+    if (!game::anim::First(ped->RwObject())) {
+        static int told = 0;
+        if (told++ < 5) LOGW("A ped of model %d has no animation: no footsteps for it (the game would have crashed)", ped->ModelIndex());
+        return;
+    }
+    g_origPlayFootSteps(ped, edx);
+}
+
 }  // namespace
 
 bool GameMouseEnabled() { return !ui::In().MouseCaptured(); }
@@ -1046,6 +1061,7 @@ void Apply() {
     mem::HookFn(0x615DC0, &HookManageObject, &g_origManageObject, "CPopulation::ManageObject");
     mem::HookFn(0x5A1910, &HookDeleteAllMissionObjects, &g_origDeleteMissionObjects, "CObject::DeleteAllMissionObjects");
     mem::HookFn(0x4CF190, &HookForAllFrames, &g_origForAllFrames, "CAnimBlendClumpData::ForAllFrames");
+    mem::RedirectCallFn(0x5E92C8, &HookPlayFootSteps, &g_origPlayFootSteps);  // CPed::ProcessControl
     // through the tasks' tables, as the task manager calls them: scripts and SetPedInCarDirect call them straight with a car
     g_origSetInDriver = (CarStepFn)mem::SwapVTable((void**)0x86EE28, 7, (void*)&HookSetInDriver);
     g_origSetInPassenger = (CarStepFn)mem::SwapVTable((void**)0x86EE04, 7, (void*)&HookSetInPassenger);

@@ -67,6 +67,7 @@ struct NetPed {
     game::CVector lastTaskTarget;
     uint8_t lastTaskMove = 0;
     bool deadApplied = false;
+    uint64_t aliveSinceMs = 0;  // dead here (deadApplied), alive again in its owner's states since then (0: not so)
     bool apart = false;         // hidden in a car that is not here for our player's school (Vehicles::Apart)
     uint64_t unshownSince = 0;  // alive in its owner's game and not made here since then (0: shown)
     int blip = 0;               // X_WAVE's radar blip here
