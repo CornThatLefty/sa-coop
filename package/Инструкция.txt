@@ -183,6 +183,8 @@ SA:COOP: как играть вместе
   а имя CJ не звучит ни в речи, ни в субтитрах. Эти голоса лежат в папке coop\voices.
   Без неё звучит голос CJ.
   Паки скинов мод привозит сам, они лежат в папке coop\skinpacks и ничего в игре не заменяют.
+  В сборках форка папки coop\skinpacks и coop\voices лежат в отдельном архиве SA-COOP-extras.zip:
+  он распаковывается в папку игры так же, как основной. Без него мод работает, но без этих скинов и голосов.
   Авторы скинов: банды Families, Ballas, Vagos и Aztecas CemeteryBlunts (с материалами
   Endochronic, Cleon77, INNOCENT KILLAZ, Flaqko, Vados, Qube, Thiago555aug и Junior_Djjr),
   вырезанные из игры прохожие Jéssica Natália, Junior_Djjr и falsenail, бета-версии прохожих

@@ -18,6 +18,7 @@
 #include "common/lib/ini/Ini.h"
 #include "common/lib/log/Log.h"
 #include "common/lib/util/Util.h"
+#include "features/balance/BalanceConfig.h"
 
 using namespace coop;
 
@@ -116,6 +117,15 @@ static int ProbeAudio() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc == 2 && !wcscmp(argv[1], L"--probe-audio")) return ProbeAudio();
+    // --write-config <server.ini>: the file as a first start writes it, every key at its preset, and
+    // balance_exclude.ini beside it, then exits. The package's build makes the server.ini it ships so (tools/build.py):
+    // its settings can be edited before the server's first start. An existing file keeps its values.
+    if (argc == 3 && !wcscmp(argv[1], L"--write-config")) {
+        std::wstring path = argv[2];
+        if (!FileExists(path)) WriteDefaultConfig(path);
+        server::WriteBalanceDefaults(path);
+        return FileExists(path) && FileExists(server::BalanceExcludePath(path)) ? 0 : 1;
+    }
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
     SetConsoleTitleW(L"SA:COOP server");

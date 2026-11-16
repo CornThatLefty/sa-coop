@@ -51,13 +51,26 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: SA-COOP
-          path: dist/SA-COOP.zip
+          path: |
+            dist/SA-COOP.zip
+            dist/coop.pdb
+
+      # the skin packs and the voices: 650 MB the mod runs without, kept for a release only
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: SA-COOP-extras
+          path: dist/SA-COOP-extras.zip
+          compression-level: 0
 
       - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: SA:COOP ${{ github.ref_name }}
-          files: dist/SA-COOP.zip
+          files: |
+            dist/SA-COOP.zip
+            dist/SA-COOP-extras.zip
+            dist/coop.pdb
           body_path: .github/release-notes.md
           prerelease: ${{ contains(github.ref_name, '-fork.') }}  # the fork's test builds
