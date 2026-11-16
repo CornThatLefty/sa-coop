@@ -11,6 +11,7 @@
 #include "common/api/protocol/Protocol.h"
 #include "common/lib/log/Log.h"
 #include "common/lib/util/Util.h"
+#include "entities/balance/Balance.h"
 #include "entities/profile/Profile.h"
 #include "entities/session/Flow.h"
 #include "shared/api/net-session/Session.h"
@@ -184,9 +185,17 @@ public:
         if (!g_based) g_seen = now, g_based = true;
         for (int i = 0; i < kCars; ++i)
             if (now.stage == g_seen.stage && now.flags[i] && !g_seen.flags[i]) {
-                Send(now, i, Local(s, kPaid));
+                // by the payout mode (entities/balance): every player gets the part the one who delivered keeps
+                int32_t paid = Local(s, kPaid);
+                int recipients = balance::PlayerCount();
+                int32_t part = balance::Share(paid, recipients);
+                balance::TakeBack(paid, part);
+                Send(now, i, part);
                 g_sent = now;  // it carries the list
-                LOGI("Our export: car %d of list %d, $%d", i, now.stage, Local(s, kPaid));
+                if (part != paid)
+                    ui::TheChat().AddSystem(Format(TR("За экспорт: $%d из $%d%s.", "Export pay: $%d of $%d%s."), part, paid,
+                                                   balance::ShareNote(recipients).c_str()));
+                LOGI("Our export: car %d of list %d, $%d, $%d to each of %d players", i, now.stage, paid, part, recipients);
             }
         g_seen = now;
         // Our delivery of the same car counts it itself: looked at after it

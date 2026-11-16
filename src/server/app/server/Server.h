@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "common/api/protocol/Balance.h"
 #include "common/api/protocol/Protocol.h"
 #include "common/lib/buffer/Buffer.h"
 #include "features/internet/Internet.h"
@@ -23,8 +24,10 @@ struct Config {
     bool sharedLife = false;      // a partner's death fails the host's story mission
     bool partnerCheats = true;    // the partners' cheat codes work
     uint16_t port = 7788;
+    std::string bind;        // the address to listen on (empty: every one of this computer's)
     int maxPlayers = 2;
     std::wstring dataDir;    // profiles/, world/
+    std::wstring configPath;  // server.ini: its [balance] section is read again by /reloadbalance
     std::wstring worldFile;  // optional initial world save (passed by the launcher)
     bool newGame = false;    // the host starts a new game: the stored world belongs to an older one
     std::string hostName;    // nickname that gets the host role (empty = first player)
@@ -105,6 +108,8 @@ private:
     bool LoadWorld(const std::wstring& path, const std::string& label);
 
     void SendInvite(Player* to);  // to == nullptr: everyone
+    void LoadBalanceFiles();       // [balance] of server.ini and balance_exclude.ini, as they are now
+    void SendBalance(Player* to);  // to == nullptr: everyone
 
     Config m_cfg;
     ENetHost* m_host = nullptr;
@@ -121,6 +126,7 @@ private:
     uint64_t m_worldWantedTime = 0;        // when the host was asked for a fresh snapshot (0 = not asked)
     bool m_prologue = false;               // the host plays a new game's prologue: partners wait for its end
     uint32_t m_gameId = 0;                 // the host's game (C_GAME_ID): whose profiles the partners get
+    proto::Balance m_balance;              // the balance settings every player counts with (S_BALANCE)
 
     std::mutex m_cmdMutex;
     std::vector<std::string> m_cmdQueue;

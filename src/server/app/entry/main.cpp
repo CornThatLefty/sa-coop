@@ -2,7 +2,7 @@
 //
 //   coop-server.exe [--port N] [--name "..."] [--password X] [--world <save file> | --new-game] [--host <nick>]
 //                   [--friendly-fire 0|1] [--partner-teleport 0|1] [--shared-life 0|1] [--partner-cheats 0|1]
-//                   [--config server.ini]
+//                   [--config server.ini] [--bind <address>]
 //                   [--data <dir>]
 #include <windows.h>
 #include <mmsystem.h>
@@ -143,6 +143,7 @@ int wmain(int argc, wchar_t** argv) {
     server::Config cfg;
     cfg.name = ini.Get("server", "name", cfg.name);
     cfg.port = (uint16_t)ini.GetInt("server", "port", kDefaultPort);
+    cfg.bind = Trim(ini.Get("server", "bind", ""));
     cfg.password = ini.Get("server", "password", "");
     cfg.maxPlayers = ini.GetInt("server", "max_players", 2);
     cfg.hostName = ini.Get("server", "host", "");
@@ -154,12 +155,14 @@ int wmain(int argc, wchar_t** argv) {
     cfg.internet = ini.GetBool("server", "internet", true);
     cfg.turn = Trim(ini.Get("server", "turn", ""));
     cfg.dataDir = dataDir;
+    cfg.configPath = configPath;
 
     for (int i = 1; i < argc; ++i) {
         std::wstring a = argv[i];
         auto next = [&]() -> std::string { return i + 1 < argc ? WideToUtf8(argv[++i]) : std::string(); };
         if (a == L"--port") cfg.port = (uint16_t)atoi(next().c_str());
         else if (a == L"--name") cfg.name = next();
+        else if (a == L"--bind") cfg.bind = next();
         else if (a == L"--password") cfg.password = next();
         else if (a == L"--host") cfg.hostName = next();
         else if (a == L"--max") cfg.maxPlayers = atoi(next().c_str());
@@ -179,7 +182,7 @@ int wmain(int argc, wchar_t** argv) {
         return 1;
     }
     SetConsoleCtrlHandler(CtrlHandler, TRUE);
-    LOGI("Команды консоли: players, kick <ник или номер> [причина], say <текст>, quit");
+    LOGI("Команды консоли: players, kick <ник или номер> [причина], say <текст>, reloadbalance, quit");
 
     std::thread input([] {
         HANDLE in = GetStdHandle(STD_INPUT_HANDLE);

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "common/api/protocol/Balance.h"
 #include "common/api/protocol/Protocol.h"
 #include "common/lib/buffer/Buffer.h"
 #include "shared/api/net-client/NetClient.h"
@@ -41,6 +42,10 @@ public:
     bool PartnerTeleport() const { return m_partnerTeleport; }  // the host let its partners use /tp and /tphere
     bool SharedLife() const { return Online() && m_sharedLife; }  // a partner's death fails the host's story mission
     bool PartnerCheats() const { return m_partnerCheats; }  // the host let its partners use cheat codes
+    // the server's balance settings (S_BALANCE); neutral offline and until they come. Revision: counts the ones received
+    // in this session (0: none yet)
+    const proto::Balance& Balance() const { return m_balance; }
+    uint32_t BalanceRevision() const { return m_balanceRevision; }
     const std::map<uint8_t, PeerInfo>& Peers() const { return m_peers; }
     const PeerInfo* Peer(uint8_t id) const;
     std::string PeerName(uint8_t id) const;
@@ -85,6 +90,8 @@ private:
     bool m_partnerTeleport = true;
     bool m_sharedLife = false;
     bool m_partnerCheats = true;
+    proto::Balance m_balance;
+    uint32_t m_balanceRevision = 0;
     std::string m_inviteCode;
     std::map<uint8_t, PeerInfo> m_peers;
     Handler m_handlers[256] = {};

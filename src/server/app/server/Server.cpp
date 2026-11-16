@@ -9,6 +9,7 @@
 #include "common/config/version/Version.h"
 #include "common/lib/log/Log.h"
 #include "common/lib/util/Util.h"
+#include "features/balance/BalanceConfig.h"
 
 namespace coop::server {
 
@@ -28,6 +29,8 @@ bool Server::Start(const Config& cfg) {
     }
     EnsureDirectory(m_cfg.dataDir + L"profiles");
     EnsureDirectory(m_cfg.dataDir + L"world");
+    if (!m_cfg.configPath.empty()) WriteBalanceDefaults(m_cfg.configPath);
+    LoadBalanceFiles();
 
     if (!net::Init()) {
         LOGE("enet_initialize failed");
@@ -35,6 +38,10 @@ bool Server::Start(const Config& cfg) {
     }
     ENetAddress addr{};
     addr.host = ENET_HOST_ANY;
+    if (!m_cfg.bind.empty() && enet_address_set_host(&addr, m_cfg.bind.c_str()) != 0) {
+        LOGE("bind = %s is not an address of this computer", m_cfg.bind.c_str());
+        return false;
+    }
     addr.port = m_cfg.port;
     // a couple of spare peers so that "server full" can be reported politely
     m_host = enet_host_create(&addr, (size_t)m_cfg.maxPlayers + 2, CH_COUNT, 0, 0);
@@ -366,6 +373,7 @@ void Server::Join(Player& p, const Hello& h, const std::string& name) {
     Writer w(S_WELCOME);
     wel.Write(w);
     net::Send(p.peer, CH_RELIABLE, w);
+    SendBalance(&p);
 
     Writer j(S_PLAYER_JOIN);
     j.U8(p.id);
@@ -418,8 +426,8 @@ void Server::HandleCommand(Player* p, const std::string& text) {
         reply(kColorServer, "Команды: /players, /pm <id> <текст>, /me <действие>",
               "Commands: /players, /pm <id> <text>, /me <action>");
         if (admin)
-            reply(kColorServer, "Для хоста: /kick <ник или номер> [причина], /say <текст>",
-                  "For the host: /kick <nickname or number> [reason], /say <text>");
+            reply(kColorServer, "Для хоста: /kick <ник или номер> [причина], /say <текст>, /reloadbalance",
+                  "For the host: /kick <nickname or number> [reason], /say <text>, /reloadbalance");
         if ((admin || m_cfg.partnerTeleport) && m_cfg.maxPlayers > 2)
             reply(kColorServer, "В игре: /tp <номер> (переместиться к игроку), /tphere <номер> (позвать игрока к себе). Номера видны в окне F2. Игрок отвечает Y или N",
                   "In the game: /tp <number> (go to a player), /tphere <number> (bring a player to you). The F2 window shows the numbers. The player answers Y or N");
@@ -463,9 +471,16 @@ void Server::HandleCommand(Player* p, const std::string& text) {
         Kick(*t, reason);
     } else if (cmd == "say" && admin && !rest.empty()) {
         SendChat(nullptr, kServerId, kColorServer, "[Сервер] " + rest, "[Server] " + rest);
+    } else if (cmd == "reloadbalance") {
+        if (!admin)
+            return reply(kColorError, "Перечитать баланс может только хост.", "Only the host can reload the balance.");
+        LoadBalanceFiles();
+        SendBalance(nullptr);
+        SendChat(nullptr, kServerId, kColorServer, "Баланс перечитан из server.ini. Команда /balance показывает значения.",
+                 "Balance reloaded from server.ini. /balance lists the values.");
     } else if (cmd == "quit" && !p) {
         Stop();
-    } else if (cmd == "tp" || cmd == "tphere" || cmd == "voice" || cmd == "save" || cmd == "skin") {
+    } else if (cmd == "tp" || cmd == "tphere" || cmd == "voice" || cmd == "save" || cmd == "skin" || cmd == "balance") {
         // handled by the game client locally; nothing to do on the server
     } else {
         reply(kColorError, "Такой команды нет. Чтобы увидеть список команд, напишите /help.",
@@ -668,6 +683,19 @@ void Server::SendProfile(Player& p) {
     w.Bytes(data.data(), data.size());
     w.U32(m_gameId);
     net::Send(p.peer, CH_RELIABLE, w);
+}
+
+void Server::LoadBalanceFiles() {
+    std::string summary;
+    m_balance = m_cfg.configPath.empty() ? proto::Balance::Preset() : LoadBalance(m_cfg.configPath, summary);
+    LOGI("Balance: %s", summary.empty() ? "presets" : summary.c_str());
+}
+
+void Server::SendBalance(Player* to) {
+    Writer w(S_BALANCE);
+    m_balance.Write(w);
+    if (to) net::Send(to->peer, CH_RELIABLE, w);
+    else Broadcast(CH_RELIABLE, w);
 }
 
 void Server::SendInvite(Player* to) {

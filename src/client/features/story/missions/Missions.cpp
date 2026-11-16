@@ -28,6 +28,7 @@
 #include "common/api/protocol/Protocol.h"
 #include "common/lib/log/Log.h"
 #include "common/lib/util/Util.h"
+#include "entities/balance/Balance.h"
 #include "entities/mission/Mission.h"
 #include "entities/ped/Peds.h"
 #include "entities/player/Players.h"
@@ -456,7 +457,8 @@ struct Side {
     uint64_t offerUntil = 0;  // its call can be made until then (0: made, or too late)
     bool offered = false;     // made, no answer yet
     int32_t moneyAtStart = 0;
-    int32_t paid = 0;         // what who joined ours has had of it so far
+    int32_t paid = 0;         // what of it who joined ours has had its part of so far
+    int32_t kept = 0;         // what the payout mode took back from us of it (entities/balance): still money it brought
     std::vector<uint8_t> with;  // who joined ours
     uint8_t owner = 0xFF;     // whose we joined
     bool hostLeads = false;   // the host's marks and texts are of a joint side activity (partner: not ours unless we joined)
@@ -4685,9 +4687,11 @@ void HandleMissionEnd(uint8_t from, Reader&) {
 
 void HandleReward(uint8_t from, Reader& r) {
     int32_t money = r.I32();
+    uint8_t recipients = r.U8(), mode = r.U8();  // how the host's game shared it out (entities/balance)
     if (!r.Ok() || from != Net().HostId() || Net().IsHost() || !core::IsPlayerReady() || !flow::InHostWorld() || money <= 0 || money > 10000000) return;
     PlayerInfos()[0].money += money;
-    ui::TheChat().AddSystem(Format(TR("Награда за миссию: $%d.", "Mission reward: $%d."), money));
+    ui::TheChat().AddSystem(Format(TR("Награда за миссию: $%d%s.", "Mission reward: $%d%s."), money,
+                                   balance::ShareNote(recipients, mode).c_str()));
 }
 
 // The destination markers drawn during the last frames. The other game draws them only within 1 s of the latest list
@@ -4818,10 +4822,24 @@ void StartParallel() {
     ClearPartnerOnscreen();
     LOGI("Our own taxi job next to %s's: the fares' money goes to both", Net().PeerName(g_side.owner).c_str());
 }
-// the money our own job brought since its start, less what the other's paid us meanwhile: the other player gets it too
+// the money our own job brought since its start, less what the other's paid us meanwhile
+int32_t SideEarned() { return PlayerInfos()[0].money + g_side.kept - g_side.moneyAtStart - g_side.received; }
+// A part of our job's money goes out by the payout mode (entities/balance): to who joined ours (to 0xFF: all of them), or
+// to the owner of the job we joined while our own taxi job runs beside it. Each gets the part we keep ourselves; the
+// rest of what the script paid us is taken back.
+void PayPart(uint8_t op, uint8_t to, int32_t amount) {
+    int recipients = to == 0xFF ? 1 + (int)g_side.with.size() : 2;
+    int32_t part = balance::Share(amount, recipients);
+    g_side.kept += balance::TakeBack(amount, part);
+    SendSide(op, to, g_side.name, part);
+    if (part != amount)
+        ui::TheChat().AddSystem(Format(TR("За задание: $%d из $%d%s.", "Job pay: $%d of $%d%s."), part, amount,
+                                       balance::ShareNote(recipients).c_str()));
+}
+// what it brought and has not gone out yet: the other player gets its part of it too
 void PayOther(uint8_t to) {
-    if (int32_t earned = PlayerInfos()[0].money - g_side.moneyAtStart - g_side.received; earned > g_side.paid) {
-        SendSide(SIDE_PAY, to, g_side.name, earned - g_side.paid);
+    if (int32_t earned = SideEarned(); earned > g_side.paid) {
+        PayPart(SIDE_PAY, to, earned - g_side.paid);
         g_side.paid = earned;
     }
 }
@@ -4973,6 +4991,7 @@ void SideUpdate() {
         g_side.offered = false;
         g_side.moneyAtStart = PlayerInfos()[0].money;
         g_side.paid = 0;
+        g_side.kept = 0;
         g_side.received = 0;
         g_baseline.clear();
         for (int i = 0; i < kNumTraces; ++i)
@@ -4982,12 +5001,12 @@ void SideUpdate() {
     } else if (!shareable && !g_side.name.empty()) {  // ours is over
         if (SideOwning()) {
             // the rest of it
-            int32_t earned = std::max(0, PlayerInfos()[0].money - g_side.moneyAtStart - g_side.received - g_side.paid);
+            int32_t earned = std::max(0, SideEarned() - g_side.paid);
             Writer w(proto::G_BLIP);
             w.U8(BLIP_CLEAR);
             Net().Send(proto::CH_RELIABLE, w);
-            SendSide(SIDE_END, 0xFF, g_side.name, earned);
-            LOGI("Shared side activity over (%s): $%d more for the %zu who joined", g_side.name.c_str(), earned, g_side.with.size());
+            PayPart(SIDE_END, 0xFF, earned);
+            LOGI("Shared side activity over (%s): $%d more shared with the %zu who joined", g_side.name.c_str(), earned, g_side.with.size());
         } else if (g_side.parallel && SideJoined()) {
             PayOther(g_side.owner);  // the rest of our own taxi job's
         }
@@ -5175,6 +5194,9 @@ void HandleSide(uint8_t from, Reader& r) {
             return;
         }
         if (SideHelps(from)) return;
+        // With a whole reward for each, who joins late is paid what the job brought before it came, as before the payout
+        // modes. Shared out, that money was earned without it and stays the owner's: only later money is shared.
+        if (balance::Settings().Payout() != proto::PAYOUT_FULL && !SideOwning()) g_side.paid = std::max(g_side.paid, SideEarned());
         g_side.with.push_back(from), g_side.offered = false;
         ForgetSent();  // all it has now goes to the newcomer
         if (name == "kicksta" || name == "blood") contest::Drop();  // one score for both now
@@ -5585,9 +5607,19 @@ private:
             // nothing: the money the host picked up from the dead in it was no reward
             std::string passed((const char*)0xB78A00, strnlen((const char*)0xB78A00, 8));
             if (int32_t earned = PlayerInfos()[0].money - g_moneyAtStart; earned > 0 && passed != g_lastPassed) {
+                // by the payout mode (entities/balance): each player in the game gets the part the host keeps, and the
+                // rest of what the script paid the host is taken back
+                int recipients = balance::PlayerCount();
+                int32_t part = balance::Share(earned, recipients);
+                balance::TakeBack(earned, part);
                 Writer rw(proto::G_MISSION_REWARD);
-                rw.I32(earned);
+                rw.I32(part);
+                rw.U8((uint8_t)recipients);
+                rw.U8((uint8_t)balance::Settings().Payout());
                 Net().Send(proto::CH_RELIABLE, rw);
+                if (std::string note = balance::ShareNote(recipients); !note.empty())
+                    ui::TheChat().AddSystem(Format(TR("Награда за миссию: $%d%s.", "Mission reward: $%d%s."), part, note.c_str()));
+                LOGI("Mission reward: $%d earned, $%d to each of %d players", earned, part, recipients);
             }
             HostSendScreen(false);
             g_mapEdits.clear();    // its gates and buildings stay as it left them in both games
