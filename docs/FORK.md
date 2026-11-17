@@ -498,6 +498,11 @@ The archive holds `coop-server`, `server.ini` with every key at its preset (`dep
 `egg-sa-coop-server.json`, an egg for a Pelican panel that installs a release from GitHub. Source: `deploy/linux`.
 The server logs `Server ready on UDP port N` once it listens: the line the egg waits for.
 
+The egg's `Release` variable at `latest` installs the release published last that has the Linux archive. Until the
+egg of 17.11 it took the first release of GitHub's list, which is ordered by tag name and not by date: with
+`fork.10` and `fork.11` published, the first one was still `fork.9`. A panel that imported the egg earlier needs the
+egg updated (its page in the panel, from the egg's own update address) or the tag written into `Release`.
+
 **How the code is shared.** Each Windows-only piece has a Linux half behind `#ifdef _WIN32` in the same file:
 
 | Piece | File | Windows | Linux |
