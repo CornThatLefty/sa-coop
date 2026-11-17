@@ -9,6 +9,7 @@ glibc 2.35 or later (Ubuntu 22.04, Debian 12 and newer) and nothing else.
 | `server.ini` | Its settings, every key at its preset, `[balance]` included |
 | `balance_exclude.ini` | Balance exclusions and per-mission overrides |
 | `sa-coop.service` | systemd unit |
+| `egg-sa-coop-server.json` | Egg for a Pelican panel |
 
 ## Install
 
@@ -51,6 +52,18 @@ Everything the server keeps is in `/opt/sa-coop/server-data`:
 | `invite.txt` | The invite code |
 
 A backup is a copy of that folder. `journalctl -u sa-coop -f` follows the log as well.
+
+## Pelican panel
+
+`egg-sa-coop-server.json` is an egg for [Pelican](https://pelican.dev). Imported into the panel's eggs, it installs
+the release named in its `Release` variable from GitHub and starts `./coop-server --port <the server's port>`.
+
+- The server's allocation is one UDP port.
+- `server.ini` and `balance_exclude.ini` are edited in the panel's file manager; a restart applies them. A reinstall
+  replaces the program and keeps both files and `server-data`.
+- The console takes the server's commands (`players`, `say <text>`, `kick <name>`, `reloadbalance`). The panel's stop
+  button sends `quit`.
+- A new release: change the `Release` variable and reinstall.
 
 ## Without systemd
 

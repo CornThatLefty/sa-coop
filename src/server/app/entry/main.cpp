@@ -246,6 +246,8 @@ static int ServerMain(int argc, wchar_t** argv) {
     signal(SIGTERM, OnSignal);
     signal(SIGPIPE, SIG_IGN);  // a console that went away is no reason to die
 #endif
+    // the line a hosting panel waits for to show the server as running (deploy/linux/egg-sa-coop-server.json)
+    LOGI("Server ready on UDP port %u", (unsigned)cfg.port);
     LOGI("Команды консоли: players, kick <ник или номер> [причина], say <текст>, reloadbalance, quit");
 
     std::thread input([] {

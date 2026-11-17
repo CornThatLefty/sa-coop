@@ -268,7 +268,9 @@ Debian 12 and newer).
 
 The archive holds `coop-server`, `server.ini` with every key at its preset (`deploy/linux/server.ini` plus the
 `[balance]` section the server writes itself), `balance_exclude.ini`, the systemd unit `sa-coop.service` and
-`README.md` with the install steps, the port to open (7788/UDP) and the data folder's layout. Source: `deploy/linux`.
+`README.md` with the install steps, the port to open (7788/UDP) and the data folder's layout, and
+`egg-sa-coop-server.json`, an egg for a Pelican panel that installs a release from GitHub. Source: `deploy/linux`.
+The server logs `Server ready on UDP port N` once it listens: the line the egg waits for.
 
 **How the code is shared.** Each Windows-only piece has a Linux half behind `#ifdef _WIN32` in the same file:
 
@@ -297,7 +299,7 @@ BCrypt code). They get a home computer through its router. `turn =` is ignored w
 the game socket and the invite code, written to `server-data/invite.txt`.
 
 **State.** Compiled and tested only in CI: the 22 server tests pass against the Linux binary there. No game has
-connected to it. `dedicated = 1` still waits for the client side (see [Dedicated mode](#dedicated-mode)); with
+connected to it, and the egg has not been imported into a panel. `dedicated = 1` still waits for the client side (see [Dedicated mode](#dedicated-mode)); with
 `dedicated = 0` the first player in the game is the host, as on any server started outside the F9 window.
 
 ## Tests without the game
