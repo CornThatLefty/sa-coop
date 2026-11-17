@@ -207,7 +207,7 @@ The F2 window (the player list) holds each player's own options under its rows. 
 
 | Option | Key | Effect |
 | --- | --- | --- |
-| `Name tags over players` | `name_tags` | The names, health and armour bars over the other players. Also `/names`, `/names on`, `/names off` in the chat |
+| `Name tags over players` | `name_tags` | The names, health and armour bars, weapon icon and wanted stars over the other players. Also `/names`, `/names on`, `/names off` in the chat. Until test build 13 the icon and the stars stayed with the option off |
 | `Chat on screen` | `chat` | The chat's lines. Off, the chat is drawn only while it is typed into (T), so notices of the mod and the server are hidden with it |
 
 Test build 4 had the name tags' checkbox in the F9 window; test build 6 moved it here. Source:
@@ -262,10 +262,10 @@ the rules a partner's already follows:
 | | Behaviour |
 | --- | --- |
 | Character | The host's profile on the server (money, weapons, skills, look, shop purchases) goes over the loaded world. A first visit starts from the world's CJ as it was saved and is the player's own from then on |
-| Profile saving | Every 30 s when changed, 3 s after a change of look, and on leaving, as a partner's |
+| Profile saving | Every 5 s when changed (30 s until test build 13), 3 s after a change of look, and on leaving, as a partner's |
 | World while playing | The host's game uploads a snapshot every 5 minutes when it can be saved (on foot, no mission) and after every passed mission |
 | World on leaving | Leaving through the F9 window or `/disconnect` uploads a snapshot first, then the connection closes once the server has it (4 s at most). In a vehicle or on a mission the game cannot be saved: the server keeps the last snapshot |
-| Game closed without leaving | The server keeps the last snapshot: up to 5 minutes of world changes are lost. The profile is at most 30 s old |
+| Game closed without leaving | The server keeps the last snapshot: up to 5 minutes of world changes are lost. The profile is at most 5 s old |
 | Wanted level | Cleared on loading: the stars in the save are the last host's |
 | Next host | The next player on an empty server gets the host role, loads that world and plays it as its own character |
 
@@ -282,6 +282,54 @@ and back on the server at 22:02 got the clothes, money, weapons and skills of 20
 - `coop.log`: `Host role taken over in the server's world: a guest host from here on`.
 
 A player promoted in test build 11 or earlier keeps the old behaviour: every player needs build 12.
+
+**The server's profile is the character (test build 13).** Three things on a player's PC went over the profile the
+server sent, and which of them acted depended on the role the player happened to get. Read from the `coop.log` of
+17.11 (test build 12):
+
+| Time | Role | Log | Weapons |
+| --- | --- | --- | --- |
+| 23:42 | host | `Profile weapons given: 22x96 28x71` | two guns |
+| 23:48 | host | `Died with animation 15`, then `Profile weapons: none` | none: the game takes them at a death |
+| 23:49 | host again | `Profile weapons given: none` | none, as saved |
+| 23:51 | partner | `Profile weapons given: none`, then `Profile weapons given: 22x96 28x71` and `The host loaded a game. Your weapons are back as they were at that save.` | the two guns again |
+
+- **Weapons of the host's save.** A partner's PC keeps what it carried when the host last saved
+  (`coop_saved_guns.bin` beside the saves) and puts it back when the host loads a game: a partner that died after
+  the host's save has its guns again as the host does. A host says "loaded" with a number that is new at each load
+  (`G_HOST_LOADED`). A guest host's load is the server's world arriving, so every host that joined a standing server
+  counted as a load, and every partner got the weapons of that file in place of its profile's. A guest host names
+  no load now, and a partner writes that file only under a host that names one. A host that plays a save of its own
+  (a game hosted from the F9 window) works as before.
+- **Look of the PC's own game.** A profile whose clothes had never been changed on the server was marked "look
+  given", and at any later visit the CJ kept on the PC from a single-player game (`coop_own_look.bin`) went over it.
+  That look now goes on at a first visit only (no profile on the server yet). Deduced from the code: the log of
+  17.11 shows no such change.
+- **Game named too early.** A host that came from a game of its own named that game to the server in the seconds
+  before the server's world loaded. A server with `dedicated = 0` moved every partner to that game's profiles (none)
+  and back. The partner's game took the empty one for a new game, stopped applying and saving, and at its next world
+  load put the server's older profile over everything played since. A host names the game once its game is the
+  session's, and a profile of the game again clears that state. Deduced from the code as well.
+
+With those gone, the same rules hold in every role on a standing server:
+
+| | Rule |
+| --- | --- |
+| Source | The profile the server sends at joining, applied over each loaded world. Nothing kept on the PC goes over it |
+| Saving | Every 5 s when changed, 3 s after a change of look, at once after money or a weapon is given or taken by another player, on leaving. A guest host's too (the at-once saves were a partner's only) |
+| First visit | The world's CJ with the look of the PC's own game, sent to the server in the same second |
+| Death, arrest | The game takes the weapons, as in single player. The profile then holds none, in every role |
+| Read back | The server finishes queued profile writes before it reads one for a joining player |
+
+Logs for a report: `coop.log` has `Profile look put on: <sum>` at each load and `Profile look: <sum>`,
+`Profile weapons: ...` when the look or the set of weapons changes; `Profile saved` once a minute with the count of
+saves. `server.log` has `Profile sent to <name> (N bytes, game G)` or `No profile of <name> in game G: a first
+visit` at each join. A look that changes between `Profile look` and the next visit's `Profile look put on` was lost
+between the two.
+
+Every player needs build 13: a guest host of build 12 still names its loads. Not run in a game. Source:
+`Progress::OnPostProcess`, `Net().onProfile`, `SaveNow` in `src/client/features/progress/Progress.cpp`;
+`Server::SendProfile`.
 
 Limits, all part of the anyone-can-host work still to do:
 

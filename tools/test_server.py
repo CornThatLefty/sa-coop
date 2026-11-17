@@ -410,6 +410,25 @@ def profiles_are_kept_per_game(make):
 
 
 @test
+def a_saved_profile_is_read_back_at_once(make):
+    """A player that saves its profile and is back in the same moment gets that profile, not the file as it was."""
+    s = make()
+    s.join("Alice")
+    b = s.join("Bob")
+    b.expect(r"EVT PROFILE size=0 game=00000000")
+    s.wait_log(r"No profile of Bob in game 00000000: a first visit")
+    b.send("profile 00000000 first")
+    b.settle()
+    time.sleep(0.5)
+    b.send("profile 00000000 second")
+    b.settle()
+    b.quit()
+    b2 = s.join("Bob")
+    b2.expect(r"EVT PROFILE size=6 game=00000000 text=second")
+    s.wait_log(r"Profile sent to Bob \(6 bytes, game 00000000\)")
+
+
+@test
 def game_id_survives_a_restart(make):
     """The stored world's game is known from the first join on after a restart, not when a host says it again."""
     s = make()

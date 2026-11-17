@@ -142,7 +142,7 @@ void TakeDelivery(void* s, const Incoming& in) {
             if (before <= slot && slot < after) Cmd(0x030C).I(1).Run();  // PLAYER_MADE_PROGRESS
     int32_t& money = PlayerInfos()[0].money;
     money = (int32_t)std::min<int64_t>((int64_t)money + in.paid, kMaxMoney);
-    if (!Net().IsHost()) SaveProfileNow();  // a world reload puts the profile's money back
+    SaveProfileNow();  // a world reload puts the profile's money back
     Show(s, shown);
     ui::TheChat().AddSystem(Format(TR("Машина сдана на экспорт. Вам $%d.", "A car was exported. You get $%d."), in.paid));
     LOGI("The other player's export: car %d of list %d, $%d", in.car, in.list.stage, in.paid);
