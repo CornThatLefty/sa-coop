@@ -884,6 +884,15 @@ bool EnteringCar(CPed* ped) {
            t == TASK_ENTER_CAR_AS_DRIVER_TIMED;
 }
 constexpr uint64_t kEnterGraceMs = 4000;  // let the enter animation finish before warping
+// the enter task anywhere in what the ped does (a script's sequence holds it under the sequence)
+bool EnterTaskRuns(CPed* ped) {
+    void* intel = ped->Intelligence();
+    if (!intel) return false;
+    for (int t : {TASK_ENTER_CAR_AS_DRIVER, TASK_ENTER_CAR_AS_PASSENGER, TASK_ENTER_CAR_AS_PASSENGER_TIMED, TASK_ENTER_CAR_AS_DRIVER_TIMED})
+        if (CallMethod<0x681740, void*>((uint8_t*)intel + 4, t)) return true;  // CTaskManager::FindActiveTaskByType
+    return false;
+}
+constexpr uint64_t kEnterLongestMs = 20000;  // a copy seated ahead of its owner waits that long for it at most
 
 // A passenger keeps the gun it got in with (#83: in with an M4 on purpose, it sat with the Tec-9 or the Uzi). At the end
 // of every get-in the game takes an SMG out for a driver's drive-by (CPed::RemoveWeaponWhenEnteringVehicle); a passenger
@@ -1584,6 +1593,7 @@ void Players::HandleExitCar(uint8_t from, Reader& r) {
     if (!rp || !rp->ped || !nv || !nv->veh) return;
     if (rp->ped->InVehicle() && rp->ped->Vehicle() == nv->veh) {
         rp->exitTaskMs = NowMs();
+        rp->exitNetId = netId;
         Cmd(0x05CD).I(rp->pedHandle).I(nv->handle).Run();  // TASK_LEAVE_CAR
     }
 }
@@ -1917,9 +1927,15 @@ void Players::ApplyState(RemotePlayer& rp) {
     // on foot but still sitting in a vehicle here: the exit animation gets a few seconds, then warp out. Not right after
     // its enter task either: the copy sat down before its owner's states said so and was warped out again.
     if (ped->InVehicle()) {
-        if (NowMs() - rp.exitTaskMs > kEnterGraceMs && NowMs() - rp.enterTaskMs > kEnterGraceMs) {
+        // Its owner still gets in (F2_ENTERING) and the copy, quicker, sits already: it waits there. A get-in of more
+        // than the 4 s of grace (a jack, a long walk to the door) had the seated copy warped out, and the driver's
+        // states that came a moment later found the seat barred for the 4 s kept after an exit: the copy stood by the
+        // car while the car drove, then appeared at the wheel (17.11).
+        bool entering = (st.flags2 & OnFootState::F2_ENTERING) && NowMs() - rp.enterTaskMs < kEnterLongestMs;
+        if (!entering && NowMs() - rp.exitTaskMs > kEnterGraceMs && NowMs() - rp.enterTaskMs > kEnterGraceMs &&
+            NowMs() - rp.pulledOutMs > 1500) {
             Cmd(0x0362).I(rp.pedHandle).F(st.pos.x).F(st.pos.y).F(st.pos.z - 1.0f).Run();  // WARP_CHAR_FROM_CAR_TO_COORD (feet)
-            rp.exitTaskMs = NowMs();
+            rp.pulledOutMs = NowMs();  // no exit of its owner's (exitTaskMs): the next seat it reports is taken at once
         }
         return;
     }
@@ -2020,8 +2036,8 @@ void Players::ApplyVehicleSeat(RemotePlayer& rp) {
     bool seated = ped->InVehicle() && ped->Vehicle() == nv->veh && seat == rp.seat;
     if (seated) return;
     // getting out: its owner's states say "in the car" until it stands outside, and the copy, out first, was put back at
-    // the wheel, then pulled out again
-    if (NowMs() - rp.exitTaskMs < kEnterGraceMs) return;
+    // the wheel, then pulled out again. Only for the vehicle it gets out of: another one's seat is taken at once.
+    if (NowMs() - rp.exitTaskMs < kEnterGraceMs && rp.exitNetId == nv->netId) return;
     // give the enter animation time; otherwise put the player in place directly. Not once its car has gone on: its owner
     // sat down and drove off (a bike in a second), and the copy ran after it for those seconds before the warp
     // (27.10)
@@ -2511,7 +2527,8 @@ void Players::SendLocalState() {
                (me->InVehicle() && me->Vehicle() && me->Vehicle()->IsTrain() ? OnFootState::F_IN_TRAIN : 0) |
                (Field<int32_t>(me, 0x740) == kCellphone ? OnFootState::F_PHONE : 0) |  // CPed::m_nWeaponModelId
                (TaskWalks(me) ? OnFootState::F_TASK_WALK : 0);
-    st.flags2 = Ref<int32_t>(0x96A7CC) != 0 ? OnFootState::F2_DOOR : 0;  // CEntryExitManager::ms_exitEnterState
+    st.flags2 = (Ref<int32_t>(0x96A7CC) != 0 ? OnFootState::F2_DOOR : 0) |  // CEntryExitManager::ms_exitEnterState
+                (EnterTaskRuns(me) ? OnFootState::F2_ENTERING : 0);
     st.area = me->AreaCode();
     st.moveState = (uint8_t)me->MoveState();
     st.wanted = WantedLevel(me);

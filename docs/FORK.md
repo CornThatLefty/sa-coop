@@ -269,11 +269,25 @@ the rules a partner's already follows:
 | Wanted level | Cleared on loading: the stars in the save are the last host's |
 | Next host | The next player on an empty server gets the host role, loads that world and plays it as its own character |
 
+**Role taken over while playing (test build 12).** When the host leaves a standing server, the role goes to a
+partner already in the game. That game plays the server's world as a partner, and from the promotion on it is a
+guest host: every row of the table above applies to it. Until this build it counted as upstream's host, whose
+character is the save's: `ProfilePlayer()` turned false, no profile reached the server, and the next visit loaded
+the world and put the profile of the promotion's minute over it. In the session of 17.11 a player promoted at 20:36
+and back on the server at 22:02 got the clothes, money, weapons and skills of 20:35.
+
+- `flow::OnHostChanged` marks the game a guest host when the role comes to it in a world loaded as a partner (not in
+  a game of its own while it waits for the world, and not in a new game played next to a prologue).
+- `Progress::OnHostChanged` keeps the profile going and names the game by the server's id, not by the local copy's.
+- `coop.log`: `Host role taken over in the server's world: a guest host from here on`.
+
+A player promoted in test build 11 or earlier keeps the old behaviour: every player needs build 12.
+
 Limits, all part of the anyone-can-host work still to do:
 
-- A host role that moves while others are in the game (the host leaves and a partner is promoted) is handled as
-  upstream handles it. No module reacts to `OnHostChanged`, and the promoted partner's game does not take over the
-  story. Sequential play (one leaves, the next joins) is what this build covers.
+- Beyond the profile and the world's snapshots, no module reacts to `OnHostChanged`. The promoted game goes on with
+  the story from its own copy of the world. Whatever the old host's game alone held (a mission in progress) ends
+  with it.
 - A host that brings its own save or starts a new game on an empty server is an ordinary host: the save's CJ is its
   character, and it gets a profile from its next visit on.
 - The world's own CJ data (position, the last host's money in the save) stays in the save. A first-time player
@@ -642,6 +656,40 @@ stopped 13 bytes on. Three changes:
 Which of the two left the pointer (a destroyed object kept in its slot, or the reference list run out) is not known:
 only the crash log was at hand. `HookHoldStep`, `LinkExtraRefs` in `src/client/app/patches/Patches.cpp`,
 `CheckEntityRefs` in `Diag.cpp`.
+
+**A player's copy beside the car its owner drives (test build 12).** A player gets into a car; in the other game its
+copy stands by the car, the car drives off, and seconds later the copy appears at the wheel. Two rules met:
+
+- A copy seated while its owner's states still say "on foot" is warped out once 4 s have passed since its get-in
+  began. The copy can sit first (its door is nearer, or the driver the owner pulls out is not in the car here), and
+  a get-in that takes the owner more than 4 s (a jack, a long walk to the door) put the copy back on the street.
+- That warp was noted as an exit, and for 4 s after an exit a copy is not seated again (its owner's states say "in
+  the car" until it stands outside). The owner's driver states arrived a moment later and found the seat barred.
+
+Now the owner's on-foot states carry `F2_ENTERING` while its get-in task runs, and a seated copy waits for its owner
+(20 s at most). The warp out of a seat the owner is not in is no longer noted as an exit, and the 4 s after an exit
+bar only the vehicle the exit message named. `F2_ENTERING` is a new bit of a byte the states already carry: the
+protocol number stays 65, and a game of an earlier build never sets the bit, so its copy behaves as before.
+Deduced from the code and a tester's description; not reproduced in a game. `ApplyState`, `ApplyVehicleSeat`,
+`HandleExitCar` in `src/client/entities/player/Players.cpp`.
+
+**Memory in the logs (test build 12).** A partner's game froze 90 minutes into a session (17.11). Its `crash.log`
+held `Exception E06D7363` in Mod Loader's `std.bank.dll`. Read against that DLL, the return addresses are
+`operator new` throwing `std::bad_alloc` (`+0x1937B`) for a sound's buffer (`+0x5AB6`) on the plugin's loader
+thread: the process had no memory left. The game is a 32-bit process: 2 GB of addresses, 4 GB when `gta_sa.exe`
+carries the large-address flag in its header (the 1.0 US file as it comes carries none). Nothing in either log told
+how the memory had gone, so three things are written from this build on:
+
+- `coop.log`, at each game's start and whenever the free address space moved by 150 MB (by 50 MB under 300 MB):
+  `Memory: N of N MB of address space free, N MB committed`. With 2 GB in all, the first line says that the flag is
+  missing.
+- Under 150 MB free, one chat line: `The game is running out of memory: N MB free. A freeze or a crash may follow.`
+- `crash.log`: every record carries the memory line with the largest free block, and a C++ exception carries its
+  type (`C++ exception of type .?AVbad_alloc@std@@: an allocation failed, the game is out of memory`).
+
+The mod changes no limit. What used the memory in that game is not known. `CheckMemory` in
+`src/client/app/diagnostics/Diag.cpp`, `ReadMemoryState`, `CppExceptionType` in
+`src/client/app/crash-handler/CrashHandler.cpp`.
 
 ## Release files
 

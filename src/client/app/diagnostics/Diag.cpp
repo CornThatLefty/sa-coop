@@ -13,6 +13,7 @@
 #include "shared/game/Game.h"
 #include "shared/lib/core/Core.h"
 #include "shared/lib/memory/Memory.h"
+#include "shared/ui/chat/Chat.h"
 
 namespace coop {
 
@@ -96,6 +97,39 @@ void CheckEntityRefs() {
     else LOGI("Entity references: %d free", free);
 }
 
+// The game is a 32-bit process: 2 GB of addresses, 4 GB when gta_sa.exe carries the large-address flag in its header.
+// With none left an allocation fails: a plugin's thread throws std::bad_alloc, and the game stands still or closes
+// (17.11: a partner's game 90 minutes into a session, Mod Loader's sound loader, and no line of the log told how the
+// memory had gone). The log has the free space at each game's start and whenever it moved by 150 MB (by 50 MB under
+// 300), and the chat says once that little is left.
+uint64_t g_memCheckMs = 0;
+unsigned g_memTold = 0;
+bool g_memWarned = false;
+void CheckMemory(bool start = false) {
+    if (!start && NowMs() - g_memCheckMs < 10000) return;
+    g_memCheckMs = NowMs();
+    MemoryState m = ReadMemoryState(false);
+    if (!m.totalMb) return;
+    bool low = m.freeMb < 300;
+    unsigned moved = m.freeMb > g_memTold ? m.freeMb - g_memTold : g_memTold - m.freeMb;
+    if (!start && moved < (low ? 50u : 150u)) return;
+    g_memTold = m.freeMb;
+    if (low) {
+        m = ReadMemoryState(true);
+        LOGW("Memory: %u of %u MB of address space free (largest block %u MB), %u MB committed", m.freeMb, m.totalMb, m.largestMb,
+             m.usedMb);
+    } else {
+        LOGI("Memory: %u of %u MB of address space free, %u MB committed%s", m.freeMb, m.totalMb, m.usedMb,
+             start && m.totalMb <= 2048 ? " (gta_sa.exe carries no large-address flag: 2 GB is all the game gets)" : "");
+    }
+    if (m.freeMb < 150 && !g_memWarned) {
+        g_memWarned = true;
+        ui::TheChat().AddSystem(Format(TR("У игры кончается память: свободно %u МБ. Возможны зависание или вылет.",
+                                          "The game is running out of memory: %u MB free. A freeze or a crash may follow."),
+                                       m.freeMb));
+    }
+}
+
 // A cutscene starts only when every one of its models is in memory (CCutsceneMgr::LoadCutsceneData_loading looks each
 // frame and waits). A model that never comes holds the mission on its black screen for good while the game runs (27.10:
 // a host's cutscenes stayed black, and its pause map and the range's marker, which wait for models too, never came).
@@ -156,11 +190,13 @@ public:
         mem::HookFn(0x619B60, &HookRsEventHandler, &g_origEvent, "RsEventHandler");
         mem::HookFn(0x5BA160, &HookInitialiseEssentialsAfterRW, &g_origEssentials, "CGame::InitialiseEssentialsAfterRW");
     }
+    void OnGameStarted() override { CheckMemory(true); }
     void OnPostProcess() override {
         if (!core::IsPlayerReady()) return;
         CheckScripts();
         CheckColModels();
         CheckEntityRefs();
+        CheckMemory();
         CheckCutsceneLoad();
         CheckPauseMenu();
     }

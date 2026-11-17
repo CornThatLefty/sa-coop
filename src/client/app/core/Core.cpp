@@ -847,6 +847,7 @@ void Init(void* hModule) {
         for (auto* m : Modules()) m->OnPeerLeave(id);
     };
     net.onHostChanged = [](uint8_t id) {
+        flow::OnHostChanged(id);
         for (auto* m : Modules()) m->OnHostChanged(id);
     };
     net.onWorld = [](const std::vector<uint8_t>& data, const std::string&) { flow::OnWorldReceived(data); };

@@ -17,4 +17,12 @@ void ReclaimCrashFilter();
 void StartHangDetector(unsigned seconds);
 void Heartbeat();
 
+// The process's memory, in MB: its address space in all (2047 for gta_sa.exe as it comes, 4095 with the large-address
+// flag in its header) and free, the largest free block (0 unless asked for: a walk over every region), and what the
+// process has committed.
+struct MemoryState {
+    unsigned totalMb = 0, freeMb = 0, largestMb = 0, usedMb = 0;
+};
+MemoryState ReadMemoryState(bool largest);
+
 }  // namespace coop

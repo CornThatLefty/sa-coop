@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 
 #include "common/config/version/Version.h"
 #include "common/lib/log/Log.h"
@@ -64,6 +65,42 @@ void WriteStack(FILE* f, const uint8_t* stack, size_t size) {
     }
 }
 
+// Bytes that can be read from an address on, up to size (0: none)
+size_t ReadableBytes(uintptr_t at, size_t size) {
+    MEMORY_BASIC_INFORMATION mbi;
+    if (!at || !VirtualQuery((void*)at, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT ||
+        (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)))
+        return 0;
+    return std::min<size_t>(size, (uintptr_t)mbi.BaseAddress + mbi.RegionSize - at);
+}
+
+// A C++ throw nobody caught (code E06D7363; its parameters: 0x19930520, the object, its _ThrowInfo): the name of the
+// thrown type as the compiler writes it (".?AVbad_alloc@std@@"). _ThrowInfo +0x0C: the array of catchable types
+// (a count, then pointers), _CatchableType +0x04: the TypeDescriptor, its name at +0x08. The record of 17.11 said
+// "Exception E06D7363 in std.bank.dll" and nothing of what it was: an allocation that failed.
+bool CppExceptionType(const EXCEPTION_RECORD* er, char* out, size_t outSize) {
+    if (er->ExceptionCode != 0xE06D7363 || er->NumberParameters < 3 || (er->ExceptionInformation[0] & ~3u) != 0x19930520) return false;
+    uintptr_t info = er->ExceptionInformation[2];
+    if (ReadableBytes(info, 16) < 16) return false;
+    uintptr_t types = *(const uint32_t*)(info + 12);
+    if (ReadableBytes(types, 8) < 8 || *(const int32_t*)types < 1) return false;
+    uintptr_t type = *(const uint32_t*)(types + 4);
+    if (ReadableBytes(type, 8) < 8) return false;
+    uintptr_t name = *(const uint32_t*)(type + 4) + 8;
+    size_t n = ReadableBytes(name, outSize - 1);
+    if (!n) return false;
+    size_t len = strnlen((const char*)name, n);
+    memcpy(out, (const void*)name, len);
+    out[len] = 0;
+    return len > 0;
+}
+
+void WriteMemory(FILE* f) {
+    MemoryState m = ReadMemoryState(true);
+    fprintf(f, "Memory: %u of %u MB of address space free (largest block %u MB), %u MB committed\r\n", m.freeMb, m.totalMb,
+            m.largestMb, m.usedMb);
+}
+
 void ModuleRange(HMODULE mod, uintptr_t& base, uintptr_t& end) {
     MODULEINFO mi{};
     if (mod && GetModuleInformation(GetCurrentProcess(), mod, &mi, sizeof(mi)))
@@ -86,6 +123,10 @@ void WriteReport(EXCEPTION_POINTERS* ep, bool firstChance) {
     if (er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && er->NumberParameters >= 2)
         fprintf(f, "  %s address %08X\r\n", er->ExceptionInformation[0] ? "write to" : "read from",
                 (unsigned)er->ExceptionInformation[1]);
+    char type[96] = "";
+    if (CppExceptionType(er, type, sizeof(type)))
+        fprintf(f, "  C++ exception of type %s%s\r\n", type, strstr(type, "bad_alloc") ? ": an allocation failed, the game is out of memory" : "");
+    WriteMemory(f);
     fprintf(f, "EAX=%08X EBX=%08X ECX=%08X EDX=%08X ESI=%08X EDI=%08X\r\nEBP=%08X ESP=%08X EIP=%08X EFL=%08X\r\n",
             (unsigned)ctx->Eax, (unsigned)ctx->Ebx, (unsigned)ctx->Ecx, (unsigned)ctx->Edx, (unsigned)ctx->Esi,
             (unsigned)ctx->Edi, (unsigned)ctx->Ebp, (unsigned)ctx->Esp, (unsigned)ctx->Eip, (unsigned)ctx->EFlags);
@@ -95,8 +136,8 @@ void WriteReport(EXCEPTION_POINTERS* ep, bool firstChance) {
     uintptr_t to = std::min<uintptr_t>(stackBase, (uintptr_t)ctx->Esp + 4096);
     WriteStack(f, (const uint8_t*)ctx->Esp, to - ctx->Esp);
     fclose(f);
-    LOGE("Exception %08X at %s (%s) - see crash.log", (unsigned)er->ExceptionCode, where,
-         firstChance ? "first-chance" : "unhandled");
+    LOGE("Exception %08X at %s (%s)%s%s - see crash.log", (unsigned)er->ExceptionCode, where,
+         firstChance ? "first-chance" : "unhandled", type[0] ? ", C++ type " : "", type);
 }
 
 // The game left its main loop (RsGlobal.quit): what breaks now breaks in the teardown, after CGame::FinalShutdown.
@@ -185,6 +226,7 @@ void DumpThread(DWORD tid, const char* why) {
                 st.wHour, st.wMinute, st.wSecond, why, where, (unsigned)ctx.Esp, (unsigned)ctx.Ebp);
         WriteStack(f, stack, size);
         WriteStreaming(f);
+        WriteMemory(f);
         fclose(f);
     }
     LOGE("Main thread %s at %s - stack written to crash.log", why, where);
@@ -215,6 +257,31 @@ DWORD WINAPI HangThread(void*) {
 }  // namespace
 
 void Heartbeat() { InterlockedIncrement(&g_heartbeat); }
+
+MemoryState ReadMemoryState(bool largest) {
+    MemoryState m;
+    MEMORYSTATUSEX ms{};
+    ms.dwLength = sizeof(ms);
+    if (GlobalMemoryStatusEx(&ms)) m.totalMb = (unsigned)(ms.ullTotalVirtual >> 20), m.freeMb = (unsigned)(ms.ullAvailVirtual >> 20);
+    PROCESS_MEMORY_COUNTERS_EX pc{};
+    pc.cb = sizeof(pc);
+    if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pc, sizeof(pc))) m.usedMb = (unsigned)(pc.PrivateUsage >> 20);
+    if (largest) {
+        SYSTEM_INFO si{};
+        GetSystemInfo(&si);
+        uintptr_t at = (uintptr_t)si.lpMinimumApplicationAddress, end = (uintptr_t)si.lpMaximumApplicationAddress;
+        size_t best = 0;
+        MEMORY_BASIC_INFORMATION mbi;
+        while (at < end && VirtualQuery((void*)at, &mbi, sizeof(mbi))) {
+            if (mbi.State == MEM_FREE) best = std::max<size_t>(best, mbi.RegionSize);
+            uintptr_t next = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
+            if (next <= at) break;
+            at = next;
+        }
+        m.largestMb = (unsigned)(best >> 20);
+    }
+    return m;
+}
 
 void StartHangDetector(unsigned seconds) {
     g_hangSeconds = seconds;

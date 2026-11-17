@@ -935,6 +935,16 @@ public:
         g_gameSentOk = false;
     }
     void OnPeerJoin(uint8_t) override { g_statBased = false; }  // the newcomer gets our records and skills
+    // The host role came to this game in the server's world it plays as a partner (flow::OnHostChanged): its character
+    // stays its own, as a guest host's. ProfilePlayer() was false from that moment, no profile went to the server, and
+    // the next visit loaded the world with the newest character and put the old profile over it (17.11: clothes, money,
+    // weapons and skills of 90 minutes back).
+    void OnHostChanged(uint8_t newHost) override {
+        if (newHost != Net().MyId() || g_guestHost || !flow::GuestHost()) return;
+        g_guestHost = g_foreignGame = true;
+        g_gameId = Net().ServerGameId();  // the game the server names, not the local copy's (no slot: game 0)
+        LOGI("Host role taken over: this player's character stays its own, its profile is saved as before");
+    }
     void OnGameStarted() override {  // a new world: the partner's profile goes on top again
         m_applied = false;
         std::random_device load;

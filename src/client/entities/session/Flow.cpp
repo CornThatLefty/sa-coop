@@ -55,6 +55,7 @@ bool g_guestHostNext = false;       // host: the same, for this file's own OnGam
 // guest. It plays its own character over it (features/progress), and what it changes in the world goes back to the
 // server while it plays and when it leaves, for whoever hosts next.
 bool g_guestHost = false;
+bool g_partnerWorld = false;        // the game running was loaded as a partner: a host's world, no save of this player's
 uint64_t g_lastUploadMs = 0;        // host: when a snapshot last went to the server
 constexpr uint64_t kGuestSnapshotMs = 5 * 60 * 1000;  // a guest host's world goes to the server that often
 uint64_t g_gameStartedAt = 0, g_snapshotTriedAt = 0;
@@ -236,6 +237,7 @@ bool SameMainScm(const std::vector<uint8_t>& save);  // below
 void OnOnline() {
     auto& net = Net();
     g_hostWorldAsked = g_hostServerWorld = g_guestHostNext = g_guestHost = false;
+    if (net.IsHost()) g_partnerWorld = false;  // host from the start: the game it brings is its own
     if (net.IsHost()) {
         if (!g_isHosting && net.ServerHasWorld()) {
             // A server standing on its own (not the one this game started) that keeps a world: the host plays that
@@ -791,6 +793,19 @@ bool HostWorldLoading() { return g_reloadFadeMs != 0 || g_phase == Phase::Loadin
 
 bool InSharedWorld() { return Net().Online() && (Net().IsHost() || InHostWorld()); }
 
+// The host left a server standing on its own, and the role came to this game while it plays that server's world as a
+// partner: from here on it is a guest host, as if it had joined the empty server. Its character stays its own
+// (features/progress goes on saving the profile), and the world goes to the server as a guest host's does. Taken for
+// "the host" of upstream, whose character is the save's, it saved no profile any more, and its next visit put the
+// profile of the promotion's minute over 90 minutes of play (17.11).
+void OnHostChanged(uint8_t newHost) {
+    if (newHost != Net().MyId() || g_guestHost || !g_partnerWorld || g_phase != Phase::Playing || g_follower || g_prologueWait)
+        return;
+    g_guestHost = true;
+    LOGI("Host role taken over in the server's world: a guest host from here on");
+}
+bool GuestHost() { return g_guestHost && Net().Online() && Net().IsHost(); }
+
 // The story moved on in the host's game (a mission passed, the call that unlocks something after it): a new
 // snapshot goes to the partners already playing, who load it, staying where they are.
 void WorldProgressed() {
@@ -920,6 +935,7 @@ void OnGameStarted() {
     if (g_phase == Phase::LoadingWorld || (Net().Online() && g_phase != Phase::Playing)) SetPhase(Phase::Playing);
     // the game that starts is the server's world, or one this host loaded itself afterwards (then the world is its own)
     g_guestHost = std::exchange(g_guestHostNext, false) && Net().Online() && Net().IsHost();
+    g_partnerWorld = Net().Online() && !Net().IsHost();
     if (g_guestHost) LOGI("Guest host: the server's world, this player's own character over it");
     // the host's save carries the host's wanted level: the partner starts without it, and so does a guest host (the
     // stars are the last host's)
