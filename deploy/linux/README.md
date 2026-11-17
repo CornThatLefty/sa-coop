@@ -67,7 +67,9 @@ the release named in its `Release` variable from GitHub and starts `./coop-serve
   newest release, test builds included; a tag such as `v0.3.4-fork.6` pins one. `release.txt` beside the server names
   the installed one. The server does not update itself: every player's game has to be the same build, so the update
   is a deliberate step.
-- The egg carries its own update address: the panel's egg page can refresh it from the repository.
+- The egg carries its own update address: the panel's egg page can refresh it from the repository. An egg imported
+  before 17.11 needs that refresh: at `latest` it stops at `v0.3.4-fork.9` (GitHub lists releases by tag name, and
+  that egg took the first one).
 
 ## Without systemd
 
