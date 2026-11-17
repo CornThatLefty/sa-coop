@@ -95,6 +95,8 @@ public:
     // our own mark in this colour on the other players' radar (BlipColour's names, empty: the allies' blue), saved in
     // coop.ini and sent to them
     void SetMarkColour(const std::string& colour);
+    // the other players' names, health and armour over their heads, on or off: at once, and kept in coop.ini (name_tags)
+    void SetNameTags(bool on);
     // the other players as arrows turned with their heading, at the end of CRadar::DrawBlips (the radar and the menu
     // map): Waypoints' hook of it calls this, and says whether it is in (MinHook takes one hook per function)
     void DrawRadarArrows();
