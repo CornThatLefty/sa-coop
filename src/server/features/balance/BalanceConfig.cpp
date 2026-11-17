@@ -156,7 +156,11 @@ void WriteBalanceDefaults(const std::wstring& serverIni) {
             "; In a car two players share, the driver's game makes the people and traffic around it (1) or the host's does (0).\r\n"
             "sync_driver_leads = 1\r\n"
             "; A player's hit on a person of another player's game shows in its own game at once (1) or when that game answers (0).\r\n"
-            "sync_instant_hits = 1\r\n";
+            "sync_instant_hits = 1\r\n"
+            "; People and traffic: how many times farther out the game makes and removes them (1 to 2), and how many.\r\n"
+            "spawn_scale = 1.0\r\n"
+            "ped_density = 1.0\r\n"
+            "car_density = 1.0\r\n";
         if (WriteFileBytes(serverIni, text.data(), text.size())) LOGI("server.ini: the [balance] section added with its presets");
     }
     std::wstring exclude = BalanceExcludePath(serverIni);

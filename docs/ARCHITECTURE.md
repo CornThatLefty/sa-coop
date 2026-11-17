@@ -2573,6 +2573,12 @@ F2; подписи ещё и командой `/names`. Окно F8 показы
 игрока по чужой копии видно сразу, прохожий может и умереть на месте до ответа владельца (`sync_instant_hits`).
 Подробности: `docs/FORK.md`, раздел «Ownership of people and cars».
 
+Форк: `spawn_scale`, `ped_density`, `car_density` в `[balance]` (вкладка «Улицы» окна F8) меняют дальность, на которой
+движок создаёт и убирает людей и машины, и их число. Дальность: множитель `TheCamera.m_fGenerationDistMultiplier`
+после `CCamera::Process`, число: значения `CPopCycle` после `UpdatePercentages` и пределы 25 и 12
+(`features/balance/Streets.cpp`). Свои дистанции мода (объявление людей и машин, общий радиус 60 м, передача
+владельца) умножаются на тот же `spawn_scale`. Подробности: `docs/FORK.md`, раздел «Wider streets».
+
 Форк: сервер собирается и под Linux (`python tools/build.py` на Linux, задача `linux` в CI). Windows-части кода
 (`Util.cpp`, `Log.cpp`, `main.cpp` сервера, `NatTraversal.cpp`) получили Linux-половину под `#ifdef _WIN32`; UPnP,
 сигнальный канал и TURN в Linux-сборку не входят. Подробности: `docs/FORK.md`, раздел «Linux server».

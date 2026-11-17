@@ -29,6 +29,10 @@ using namespace game;
 // partner closer than this to the host: the host's population (spawned 40-55 m around the host) covers both
 constexpr float kShareRadius = 60.0f;
 constexpr float kShareRadiusOff = 90.0f;  // hysteresis
+// The server's spawn_scale: the engine makes and removes its people and traffic that many times farther out
+// (features/balance/Streets.cpp), and every distance here that follows from the engine's is that many times longer.
+// The 100 m of this game's loaded ground are not: the ground loads as far as before.
+float Range() { return Net().SpawnScale(); }
 
 bool g_suppress = false;
 // The game whose people cover ours makes the parked cars here while our player is wanted as well: the chase is our
@@ -88,7 +92,7 @@ void UpdateSuppression() {
     if (car != 0xFF) source = car;
     if (Net().Online() && source != Net().MyId() && core::IsPlayerReady()) {
         CPlayerPed* me = FindPlayerPed(0);
-        float limit = g_suppress || g_covered ? kShareRadiusOff : kShareRadius;
+        float limit = (g_suppress || g_covered ? kShareRadiusOff : kShareRadius) * Range();
         auto covers = [&](const RemotePlayer* src) {
             if (!src || !src->hasState) return false;
             // a remote-controlled toy: the engine makes the people and cars around it (FindPlayerCentreOfWorld), not
@@ -176,8 +180,9 @@ const CVector* NearestRemote(const CVector& p, float maxDist, int8_t area, uint8
 
 // The other player looks at p: within 60 m of its camera and ~60 degrees of where it looks (its state carries the
 // camera). The engine's culling knows only this game's camera: off it and over 25 m a ped went in 4 s, in front of the
-// other player ("they vanish when my partner turns around").
+// other player ("they vanish when my partner turns around"). `within` is of the game's own range: times spawn_scale here.
 bool RemoteSees(const CVector& p, int8_t area, float within = 60.0f) {
+    within *= Range();
     for (auto& [id, rp] : Players::Instance().All()) {
         if (!rp.hasState || rp.state.area != area || NowMs() - rp.stateRecvMs > 1500) continue;
         CVector d = p - (rp.state.pos + rp.state.cam.sourceOffset);
@@ -202,11 +207,11 @@ void __cdecl HookManagePed(CPed* ped, const CVector* centre) {
         // far from this game's player and clearly nearer the other one: the other game keeps it (the margin keeps a ped
         // from going back and forth between two players standing together). Past this game's ground (collision loads
         // ~120 m around its player) it goes even in view here: it would fall through the map
-        if (r && local > 60.0f && (p - *r).Length2D() < local - 30.0f && CanTake(who) &&
+        if (r && local > 60.0f * Range() && (p - *r).Length2D() < local - 30.0f * Range() && CanTake(who) &&
             Peds::Instance().QueueGiveAway(ped, who, local >= 100.0f))
             return;
         // the other player still needs it (next to it, or in its view) while this game has ground under it
-        if (local < 100.0f && ped->Health() > 0.0f && ((r && (p - *r).Length2D() < 50.0f) || RemoteSees(p, area))) return;
+        if (local < 100.0f && ped->Health() > 0.0f && ((r && (p - *r).Length2D() < 50.0f * Range()) || RemoteSees(p, area))) return;
         if (r) {
             g_origManagePed(ped, r);
             return;
@@ -233,7 +238,7 @@ void __cdecl HookRemoveAllRandomPeds() {
         // our player is in the new area already while it still stands at the door: a street ped is the street's
         int8_t area = ped->GetPosition().z > 900.0f ? AreaOf(ped) : ped->AreaCode();
         uint8_t who = 0;
-        if (NearestRemote(ped->GetPosition(), 60.0f, area, &who) && CanTake(who)) Peds::Instance().GiveAway(np->netId, who);
+        if (NearestRemote(ped->GetPosition(), 60.0f * Range(), area, &who) && CanTake(who)) Peds::Instance().GiveAway(np->netId, who);
     }
     g_origRemoveAllRandom();
 }
@@ -247,7 +252,7 @@ void __cdecl HookPossiblyRemoveVehicle(CVehicle* v) {
     // goes as usual (kept, they filled the vehicle pool around two players)
     uint8_t who = 0;
     if (Net().Online() && v && v->Status() != 5 /* STATUS_WRECKED */)
-        if (const CVector* r = NearestRemote(v->GetPosition(), 140.0f, v->AreaCode(), &who)) {
+        if (const CVector* r = NearestRemote(v->GetPosition(), 140.0f * Range(), v->AreaCode(), &who)) {
             CVector me = FindPlayerPed(0)->GetPosition();
             float local = (v->GetPosition() - me).Length2D();
             if (local < 100.0f) return;
@@ -255,7 +260,7 @@ void __cdecl HookPossiblyRemoveVehicle(CVehicle* v) {
             // watched through the host's camera) made cars "far" at once, which went to the other game and were made
             // again, 299 in 4 minutes into the host's full pool (#6). Given only then: our camera near our player, the
             // other player looking at it, one a second.
-            if ((cam::Source() - me).Length() < 50.0f && (v->GetPosition() - *r).Length2D() < local - 40.0f &&
+            if ((cam::Source() - me).Length() < 50.0f && (v->GetPosition() - *r).Length2D() < local - 40.0f * Range() &&
                 RemoteSees(v->GetPosition(), v->AreaCode(), 140.0f) && CanTake(who)) {
                 if (NowMs() - g_carGivenMs < 1000) return;  // kept till its turn
                 if (Vehicles::Instance().QueueGiveAway(v, who)) {

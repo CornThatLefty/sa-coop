@@ -41,9 +41,12 @@ struct Reg {
 
 // owned peds closer than "in" to the other player are announced and removed there beyond "out";
 // vehicle occupants use the vehicle ranges so traffic is never seen without its driver
-float SyncIn(CPed* p) { return p->InVehicle() ? 170.0f : 120.0f; }
-float SyncOut(CPed* p) { return p->InVehicle() ? 220.0f : 150.0f; }
-constexpr float kFootIn = 120.0f, kFootOut = 150.0f;
+// The distances are the game's own range's (people made ~50 m out, traffic ~160 m): with the server's spawn_scale the
+// engine's are that many times longer, and so are these.
+float SyncIn(CPed* p) { return (p->InVehicle() ? 170.0f : 120.0f) * Net().SpawnScale(); }
+float SyncOut(CPed* p) { return (p->InVehicle() ? 220.0f : 150.0f) * Net().SpawnScale(); }
+float FootIn() { return 120.0f * Net().SpawnScale(); }
+float FootOut() { return 150.0f * Net().SpawnScale(); }
 constexpr int kSpecialFirst = 290, kSpecialLast = 299;
 constexpr int kEmptyDecisionMaker = 65542;  // SET_CHAR_DECISION_MAKER template "Empty"
 constexpr int TASK_ENTER_CAR_AS_PASSENGER = 700, TASK_ENTER_CAR_AS_DRIVER = 701, TASK_LEAVE_CAR = 704;
@@ -801,7 +804,7 @@ CPed* Peds::SpawnMirror(NetPed& np) {
     }
     bool missionPed = np.pedType >= 24 /* PED_TYPE_MISSION1.. */ || (np.model >= kSpecialFirst && np.model <= kSpecialLast);
     // on foot near a third player only: its copy waits (ApplyMirror asks again). One in a car comes with the car.
-    if (!missionPed && !(st.flags & PedSyncState::F_IN_VEHICLE) && FarFromUs(st.pos, st.area, kFootIn)) return nullptr;
+    if (!missionPed && !(st.flags & PedSyncState::F_IN_VEHICLE) && FarFromUs(st.pos, st.area, FootIn())) return nullptr;
     if (!IsModelLoaded(model)) {
         // streamed in the background, the spawn is retried (a blocking load per ped stalls the frame). A request with no
         // flag lasts one CStreaming::Update (its PurgeRequestList): the model of a mission's person this game has nowhere
@@ -1112,7 +1115,7 @@ void Peds::ApplyMirror(NetPed& np) {
         if (now - np.lastTaskMs >= 100) {
             np.lastTaskMs = now;
             SpawnMirror(np);
-            if (!np.ped && !FarFromUs(st.pos, st.area, kFootIn)) NoteUnshown(np, now);
+            if (!np.ped && !FarFromUs(st.pos, st.area, FootIn())) NoteUnshown(np, now);
         }
         return;
     }
@@ -1130,7 +1133,7 @@ void Peds::ApplyMirror(NetPed& np) {
         return;
     }
     if (np.pedType < 24 /* PED_TYPE_MISSION1.. */ && !(np.model >= kSpecialFirst && np.model <= kSpecialLast) && !ped->InVehicle() &&
-        FarFromUs(st.pos, st.area, kFootOut)) {  // near a third player, no more near ours (SpawnMirror)
+        FarFromUs(st.pos, st.area, FootOut())) {  // near a third player, no more near ours (SpawnMirror)
         Cmd(0x009B).I(np.handle).Run();  // DELETE_CHAR
         m_byPtr.erase(ped);
         np.ped = nullptr;

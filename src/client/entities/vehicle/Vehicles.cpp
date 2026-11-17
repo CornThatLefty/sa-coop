@@ -32,11 +32,14 @@ struct Reg {
 
 constexpr uint8_t STATUS_PHYSICS = 3, STATUS_WRECKED = 5;
 constexpr uint8_t VEHICLE_CREATED_RANDOM = 1, VEHICLE_CREATED_MISSION = 2, VEHICLE_CREATED_PARKED = 3;
-constexpr float kTrafficIn = 170.0f;   // owned vehicles closer than this to the partner are announced (> car spawn range)
-constexpr float kTrafficOut = 220.0f;  // and dropped from the network beyond this
+// Owned vehicles closer than "in" to the partner are announced (> car spawn range) and dropped from the network beyond
+// "out". The car spawn range is the server's spawn_scale times the game's own, and so are these.
+float TrafficIn() { return 170.0f * Net().SpawnScale(); }
+float TrafficOut() { return 220.0f * Net().SpawnScale(); }
 // an aircraft is seen from much farther: a police helicopter over the other player, 60-100 m up, came and went for a
 // partner a little way off (26.10)
-constexpr float kAirIn = 350.0f, kAirOut = 420.0f;
+float AirIn() { return std::max(350.0f, TrafficIn()); }
+float AirOut() { return std::max(420.0f, TrafficOut()); }
 bool Aircraft(CVehicle* v) {
     int type = v->VehicleSubClass();
     return type == VEHICLE_TYPE_HELI || type == VEHICLE_TYPE_PLANE || type == VEHICLE_TYPE_FHELI || type == VEHICLE_TYPE_FPLANE;
@@ -479,7 +482,7 @@ bool Vehicles::CreateMirror(const VehicleSpawn& sp) {
         LOGI("Vehicle %04X (model %d) is the one player %d was handed (%04X here): ours stays", sp.netId, sp.model, sp.owner, was);
         return true;
     }
-    if (!ShownAnywhere(sp.netId, sp.script) && FarFromUs(sp.pos, sp.area, kTrafficIn)) return false;  // waits in m_pending
+    if (!ShownAnywhere(sp.netId, sp.script) && FarFromUs(sp.pos, sp.area, TrafficIn())) return false;  // waits in m_pending
     bool adopted = false;
     CVehicle* v = FindAdoptable(sp.model, sp.pos);
     if (v) {
@@ -578,7 +581,7 @@ static bool InShopWithUs(CVehicle* v) {
 static bool ByTheirDoor(CVehicle* v) {
     CVector p = v->GetPosition();
     for (auto& [id, rp] : Players::Instance().All())
-        if (rp.hasState && rp.state.area != 0 && rp.streetPos.x != 0.0f && TrueArea(v) == 0 && (rp.streetPos - p).Length() < kTrafficOut)
+        if (rp.hasState && rp.state.area != 0 && rp.streetPos.x != 0.0f && TrueArea(v) == 0 && (rp.streetPos - p).Length() < TrafficOut())
             return true;
     return false;
 }
@@ -1059,7 +1062,7 @@ void Vehicles::OnPreProcess() {
             SetApart(nv, !(me->InVehicle() && me->Vehicle() == nv.veh) && ((school && nv.script) || InShopWithUs(nv.veh)));
             ApplyMirror(nv, dt);
             if (nv.createdByUs && !nv.handedUntil && !HasPlayerInside(nv.veh) && !ShownAnywhere(id, nv.script) &&
-                FarFromUs(nv.veh->GetPosition(), TrueArea(nv.veh), kTrafficOut))
+                FarFromUs(nv.veh->GetPosition(), TrueArea(nv.veh), TrafficOut()))
                 far.push_back(id);
         }
     }
@@ -1107,7 +1110,7 @@ void Vehicles::ScanTraffic() {
     CEntity* onVehicle = FindPlayerPed(0)->AttachedTo();
     for (auto& [id, nv] : m_byId)
         if (!IsMirror(nv) && IsVehicleValid(nv.veh) && !HasPlayerInside(nv.veh) && nv.veh != toy && (CEntity*)nv.veh != onVehicle &&
-            RemoteViewDistance(nv.veh->GetPosition(), TrueArea(nv.veh)) > (Aircraft(nv.veh) ? kAirOut : kTrafficOut) &&
+            RemoteViewDistance(nv.veh->GetPosition(), TrueArea(nv.veh)) > (Aircraft(nv.veh) ? AirOut() : TrafficOut()) &&
             !(nv.createdByUs && ByTheirDoor(nv.veh)))
             gone.push_back(id);
     for (uint16_t id : gone) {
@@ -1133,7 +1136,7 @@ void Vehicles::ScanTraffic() {
         // made and deleted in the other game. A parked car goes out once it has stood 5 s (CVehicle::m_nCreationTime).
         if (v->CreatedBy() == VEHICLE_CREATED_PARKED && !HasPlayerInside(v) && Ref<uint32_t>(0xB7CB84) - Field<uint32_t>(v, 0x430) < 5000)
             continue;
-        if (v == toy || RemoteViewDistance(v->GetPosition(), TrueArea(v)) < (Aircraft(v) ? kAirIn : kTrafficIn)) EnsureNetworked(v);
+        if (v == toy || RemoteViewDistance(v->GetPosition(), TrueArea(v)) < (Aircraft(v) ? AirIn() : TrafficIn())) EnsureNetworked(v);
     }
 }
 

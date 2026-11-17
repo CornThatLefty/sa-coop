@@ -268,6 +268,34 @@ def balance_values_from_server_ini(make):
 
 
 @test
+def streets_settings_reach_every_game(make):
+    """spawn_scale, ped_density and car_density: the presets are the game's own range and numbers, a value of server.ini
+    reaches the players (one past its range clamped), and a change made in the game reaches every player at once."""
+    s = make()
+    text = s.ini.read_text(encoding="utf-8")
+    check("spawn_scale = 1.0" in text and "ped_density = 1.0" in text and "car_density = 1.0" in text, "the presets are not in server.ini")
+    b = s.join("Alice").balance()
+    check(near(b["spawn_scale"], 1) and near(b["ped_density"], 1) and near(b["car_density"], 1), f"the presets: {b}")
+
+    s = make("[balance]\nspawn_scale = 3\nped_density = 1.5\ncar_density = 0\n")
+    a = s.join("Alice")
+    b = a.balance()
+    check(near(b["spawn_scale"], 2), f"spawn_scale is not clamped to 2: {b}")
+    check(near(b["ped_density"], 1.5) and near(b["car_density"], 0), f"the densities: {b}")
+    bob = s.join("Bob")
+    bob.balance()
+    a.send("set balance spawn_scale 1.5")
+    for p in (a, bob):
+        check(near(p.balance()["spawn_scale"], 1.5), f"{p.name}: the range after the change")
+    check(re.search(r"(?m)^spawn_scale = 1.5", s.ini.read_text(encoding="utf-8")), "server.ini has the range")
+    a.send("set balance spawn_scale 2.5")
+    a.expect(r"EVT CHAT from=255 Setting spawn_scale: not a value")
+    a.send("settings")
+    items = settings_of(a)[1]
+    check(items.get("balance.spawn_scale") == "1.5" and items.get("balance.car_density") == "0.0", f"the settings window: {items}")
+
+
+@test
 def balance_exclusions_and_mission_overrides(make):
     """balance_exclude.ini: models, missions and [mission:<name>] sections reach the players."""
     s = make(files={"balance_exclude.ini": "[exclude]\nmodels = 280, 281; 7\nmissions = Sweet1, intro\n\n"

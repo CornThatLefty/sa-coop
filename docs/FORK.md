@@ -16,6 +16,7 @@ All players and the server must run the same fork build: the protocol version di
 - [Server settings window (F8)](#server-settings-window-f8)
 - [Host of a standing server plays its world](#host-of-a-standing-server-plays-its-world)
 - [Ownership of people and cars](#ownership-of-people-and-cars)
+- [Wider streets](#wider-streets)
 - [Server additions](#server-additions)
 - [Dedicated mode](#dedicated-mode)
 - [Linux server](#linux-server)
@@ -37,7 +38,8 @@ never read balance values from their own files, so every game counts with the sa
 
 A client that received no `S_BALANCE` keeps the neutral values: every multiplier 1.0, payouts whole.
 
-`/balance` in the chat lists the values in effect: player counts, enemy multipliers, price multipliers, payout mode.
+`/balance` in the chat lists the values in effect: player counts, enemy multipliers, the streets' range and numbers,
+price multipliers, payout mode.
 
 **Scaling formula.** `value = base × (1 + per_player × (n − 1))`, where `n` is the number of players in the game. A
 player in the menu or loading is not counted. For a story mission's people, `n` counts only the players within
@@ -66,6 +68,9 @@ player in the menu or loading is not counted. For a story mission's people, `n` 
 | `payout_share` | 0.5 | 1.0 | 0–1 | Each player's part of the amount in `scaled` mode |
 | `sync_driver_leads` | 1 | 0 | 0 or 1 | In a car two players share, the driver's game makes the people and traffic. See [Ownership](#ownership-of-people-and-cars) |
 | `sync_instant_hits` | 1 | 0 | 0 or 1 | A player's hit on another game's person shows in its own game at once |
+| `spawn_scale` | 1.0 | 1.0 | 1–2 | How many times farther out people and traffic are made and removed. See [Wider streets](#wider-streets) |
+| `ped_density` | 1.0 | 1.0 | 0–4 | Number of people on the streets |
+| `car_density` | 1.0 | 1.0 | 0–4 | Number of cars in traffic |
 
 "Preset" is what the server uses when `server.ini` does not set the key. "Neutral" is the unmodified game.
 
@@ -209,8 +214,8 @@ Test build 4 had the name tags' checkbox in the F9 window; test build 6 moved it
 
 ## Server settings window (F8)
 
-F8 in the game opens the server's settings: the `[server]` and `[balance]` sections of its `server.ini` on three tabs
-(Server, Combat, Economy). The host of a game started from the F9 window and a server's admins change them there;
+F8 in the game opens the server's settings: the `[server]` and `[balance]` sections of its `server.ini` on four tabs
+(Server, Combat, Economy, Streets). The host of a game started from the F9 window and a server's admins change them there;
 other players see the values without the passwords and the admin list.
 
 A change is in effect at once, is written to `server.ini`, and is told to every player in the chat
@@ -321,6 +326,85 @@ engine's damage response for a person with the copies' empty decision maker, whi
 Planned next: a person changing owner in place (the same person and number, only the owner changes) with a claim by
 the last player to hit it, then a claim by the nearest player as the weakest rule, with a margin and a hold so that
 people do not flip between two players standing together.
+
+## Wider streets
+
+Three `[balance]` keys, on the Streets tab of F8, change how far out the game makes its people and traffic and how
+many it makes. A change is in effect at once in every game. At the presets (1.0 each) the game is unchanged.
+
+| Key | Effect |
+| --- | --- |
+| `spawn_scale` | Multiplies every distance at which the engine makes and removes people, traffic and parked cars, and the distance people and vehicles are drawn to |
+| `ped_density` | Multiplies the number of people the engine keeps on the streets |
+| `car_density` | Multiplies the number of cars the engine keeps in traffic |
+
+**Distances in the game itself and at `spawn_scale = 2`**
+
+| What | Game | At 2 |
+| --- | --- | --- |
+| People made (in view) | 42.5–50.5 m | 85–101 m |
+| People removed | past 54.5 m | past 109 m |
+| People drawn | to about 100 m | to about 200 m |
+| Traffic made (in view) | 120–160 m | 240–320 m |
+| Traffic removed | past 170 m | past 340 m |
+| Parked cars made | within 160 m | within 320 m |
+| Vehicles drawn | to 212 m | to 424 m |
+
+The rings behind the camera (people 15–25 m, cars 38 m) are fixed distances in the engine and stay as they are.
+
+**Numbers.** A range of 2 covers four times the ground, so the engine's numbers are multiplied by
+`density × spawn_scale²`: a street looks as full as before, out to the new distance. The engine's own limits are 25
+people and 12 moving cars. Each game stops at a part of its own pools: 45% of the ped pool for street people, 40% of
+the vehicle pool for traffic. The rest is for mission people and the other games' copies.
+
+| Pools | People at range 2, density 1 | Traffic at range 2, density 1 |
+| --- | --- | --- |
+| The game's own (140 people, 110 vehicles) | 63 | 44 |
+| A limit adjuster's 1000 and 1000 | 100 | 48 |
+
+Random traffic stops at 127 cars whatever the pools: the engine's own check of that number (45 in the game) holds one
+signed byte.
+
+`coop.log` has `Pools: N people, N vehicles, N objects` at every game start and a `Streets:` line whenever the range
+or the numbers change. The mod reads the pool sizes as they are and changes none: Open Limit Adjuster or fastman92
+Limit Adjuster gives the bigger pools.
+
+A script's own density (`SET_PED_DENSITY_MULTIPLIER`, `SET_CAR_DENSITY_MULTIPLIER`) still applies on top: a mission
+that empties a street still empties it.
+
+**The mod's own distances** that follow from the engine's are multiplied by `spawn_scale` in every game alike:
+
+| Distance | Game's range | Where |
+| --- | --- | --- |
+| A person is announced to another player within / dropped past | 120 / 150 m (170 / 220 m in a vehicle) | `SyncIn`, `SyncOut`, `FootIn`, `FootOut` in `Peds.cpp` |
+| A vehicle is announced within / dropped past | 170 / 220 m | `TrafficIn`, `TrafficOut` in `Vehicles.cpp` |
+| Two players this close share one game's people and traffic | 60 m (90 m to part) | `kShareRadius`, `kShareRadiusOff` in `Population.cpp` |
+| A person goes to the nearer player's game | past 60 m, 30 m nearer the other | `HookManagePed` |
+| A car goes to the nearer player's game | other player within 140 m, 40 m nearer | `HookPossiblyRemoveVehicle` |
+| A spot in another player's view makes no new person or car | 42.5 m, 90 m | `SeenByOther` |
+| A leaving game's people and cars go to a player this near | 250 m | `WeInherit` in `Players.cpp` |
+
+Not multiplied: the 100 m within which a game keeps a person or car because it has ground under it. The game loads
+collision about 120 m around its player whatever the range.
+
+`kShareRadius` was to stay fixed in the implementation spec. It is scaled: at range 2 a game makes people up to
+101 m out, and two games 70 m apart would each fill the same street.
+
+**Limits**
+
+- Ground is loaded about 120 m around a player. People made past it stand still until the player comes nearer;
+  traffic drives on its road nodes and is not affected.
+- Road nodes are loaded 350 m around a player. That is why `spawn_scale` stops at 2.
+- The engine finds a new car's spot by walking road links out from the player: at most 230 m of links (multiplied by
+  `spawn_scale` by the mod) and at most 30 nodes (not changed). Where nodes stand close together, a range near 2
+  makes fewer cars than the numbers allow.
+- More people and cars mean more to draw and to send. A range of 1.5 with the game's own pools is a moderate start.
+- Every game needs this build. A game on an older build keeps the game's own range, and people and cars pass between
+  the two games at different distances.
+
+Not in this build: the mod raising the pools itself, and each game's pool sizes shown to the other players.
+
+`src/client/features/balance/Streets.cpp`; none of it was run in a game by the author.
 
 ## Server additions
 
@@ -465,6 +549,16 @@ All for `gta_sa.exe` 1.0 US, taken from gta-reversed and checked in the executab
 | `CPed + 0x71A` | `m_nWeaponAccuracy` (byte) | `CPed::CPed` writes 60 at `0x5E83EB` |
 | `CPed + 0x4E0` | `m_acquaintance` (5 × u32: respect, like, ignore, dislike, hate) | `CPed::CPed` at `0x5E835A`; bit `1 << pedType` per `0x608830` |
 | `0xC0BBE8` | `CPedType::ms_apPedTypes` (pointer, 0x14 bytes per type) | `CPedType::SetPedTypeAsAcquaintance` at `0x608E20` |
+| `0x52B730` | `CCamera::Process()`, thiscall | Starts `sub esp, 0xA0`; four callers; stores `[esi+0xF4]` at `0x52C9F1` |
+| `CCamera + 0xF4` (`0xB6F11C`) | `m_fGenerationDistMultiplier` (float) | Set to 70 / FOV at `0x52C9D9`–`0x52C9F1`; 16 readers: `PossiblyRemoveVehicle` `0x4250EA`, `GenerateOneRandomCar` `0x430407` `0x431A06` `0x431A1E` `0x431A76`, `ManagePed` `0x6120F9` `0x612122`, `CPopulation::Update` `0x616778`…, car generators `0x6F3004` `0x6F30B7`, `SetRenderWareCamera` `0x732906` `0x732920` `0x73293A` |
+| `0x7328C0` | `CVisibilityPlugins::SetRenderWareCamera(RwCamera*)`, cdecl | Writes `ms_pedLodDist` at `0x732968`; five callers |
+| `0xC88034` | `CVisibilityPlugins::ms_pedLodDist` (float, squared) | Two references: the write above and `RenderPedCB`'s compare at `0x7335EF` |
+| `0x8D2538` | `CPopulation::MaxNumberOfPedsInUse` (u32, 25) | Read by `AddToPopulation` at `0x6148D1`; written 25 at `0x56D166` and `0x610E78` only |
+| `0x8A5B24` | `CCarCtrl::MaxNumberOfCarsInUse` (u32, 12) | Read by `GenerateOneRandomCar` at `0x43011F`; written 12 at `0x56D170` only |
+| `0xC0BC40`, `0xC0BC44`, `0xC0E978` | `CPopCycle::m_NumOther_Peds`, `m_NumCops_Peds`, `m_NumDealers_Peds` (float) | Summed with `m_NumGangs_Peds` by `AddToPopulation` at `0x6148E0`–`0x6148F2` |
+| `0xC0BC30`–`0xC0BC3C` | `CPopCycle::m_NumOther_Cars`, `m_NumCops_Cars`, `m_NumGangs_Cars`, `m_NumDealers_Cars` (float) | Summed by `GenerateOneRandomCar` at `0x43013D`–`0x43014F` |
+| `0x434224` | The 45 of `cmp eax, 45` in `CCarCtrl::GenerateRandomCars` (random cars at most) | Bytes `83 F8 2D` at `0x434222`, after `mov eax, [NumRandomCars]` |
+| `0x4244F6` | Operand of `fcomp [0x858F80]` (230.0) in `CCarCtrl::GenerateCarCreationCoors2`: the road walk's length | Bytes `D8 1D 80 8F 85 00` at `0x4244F4`; the walked length is added at `0x424B26` |
 
 No address is marked `TODO(verify)`.
 
@@ -512,6 +606,8 @@ archive over an earlier install replaces both files; skip them to keep edited on
 - Nothing in the client could be run in the game by the author of these changes. Every client-side item needs the
   in-game checks listed in the release notes.
 - Enemy health scaling does not show as a number anywhere: a hostile person simply takes more hits.
+- `spawn_scale` above about 1.5: people past the loaded ground stand still until a player comes nearer, and traffic
+  thins where road nodes stand close. See [Wider streets](#wider-streets).
 - A person counts as a story mission's by ownership in a partner's game, so the host's street gang members near a
   mission use the mission's values there.
 - `scaled` mode applies to a lone player on a server too.

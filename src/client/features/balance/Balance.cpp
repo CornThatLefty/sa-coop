@@ -17,6 +17,7 @@
 #include "common/lib/util/Util.h"
 #include "entities/balance/Balance.h"
 #include "entities/session/Flow.h"
+#include "features/balance/Streets.h"
 #include "shared/api/net-session/Session.h"
 #include "shared/config/Config.h"
 #include "shared/game/Game.h"
@@ -81,6 +82,7 @@ void __cdecl HookUpdatePercentages() {
     g_origUpdatePercentages();
     g_gangScale = Net().Online() && core::IsPlayerReady() ? balance::Scale(Stat::GangDensity, false) : 1.0f;
     if (g_gangScale != 1.0f) Ref<float>(0xC0BC48) *= g_gangScale;  // CPopCycle::m_NumGangs_Peds
+    streets::ScaleCounts();
 }
 
 // ---------------------------------------------------------------- accuracy
@@ -155,6 +157,8 @@ void TellBalance() {
                              "Enemies: health %s, damage %s, accuracy %s, gangs on the streets %s."),
                           Times(balance::Scale(Stat::Health, false)).c_str(), Times(balance::Scale(Stat::Damage, false)).c_str(),
                           Times(balance::Scale(Stat::Accuracy, false)).c_str(), Times(balance::Scale(Stat::GangDensity, false)).c_str()));
+    chat.AddSystem(Format(TR("Улицы: дальность %s, людей %s, машин %s.", "Streets: range %s, people %s, traffic %s."),
+                          Times(streets::Range()).c_str(), Times(streets::People()).c_str(), Times(streets::Traffic()).c_str()));
     if (balance::StoryMissionOn())
         chat.AddSystem(balance::MissionExcluded()
                            ? std::string(TR("Миссия: баланс выключен.", "Mission: scaling off."))

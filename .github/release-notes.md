@@ -1,11 +1,30 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 8: less lag for a player who is not the host. The driver's
-game makes the streets of a shared car, and a hit on another game's person shows at once.
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 9: people and traffic made farther out and in greater
+numbers, set on the server.
 
-It plays with test builds 6 and 7 (protocol 65) and does not connect to builds 1 to 5 or to upstream 0.3.4. Every
-player and the server should have this build: in a car shared with a player on an older build both games make
-people and traffic.
+It connects to test builds 6 to 8 (protocol 65) and not to builds 1 to 5 or to upstream 0.3.4. Every player and
+the server need this build for the new settings: a game on an older build keeps the game's own range.
 
-## New since test build 7
+## New since test build 8
+
+- **Wider streets.** Three settings on the new Streets tab of F8 (`[balance]` of `server.ini`), in effect at once in
+  every game:
+  - `People and traffic range` (`spawn_scale`, 1 to 2): how many times farther out the game makes and removes
+    people, traffic and parked cars. People and vehicles are drawn that much farther too.
+  - `People density` (`ped_density`) and `Traffic density` (`car_density`), 0 to 4.
+
+  The numbers grow with the range, so a street stays as full as before out to the new distance. Each game stops at
+  a part of its own pools: 63 street people and 44 cars with the game's own pools, more with Open Limit Adjuster or
+  fastman92 Limit Adjuster. At 1.0 each the game is unchanged.
+  To check: the host sets the range to 1.5 in F8. People and cars show farther down a long street within a few
+  seconds, in every player's game. `/balance` prints `Streets: range x1.5, people x2.25, traffic x2.25` (lower
+  numbers where a pool is small). `coop.log` has `Pools:` and `Streets:` lines.
+  To watch for at a range near 2: people standing still far away until a player comes nearer, and thin traffic in
+  dense city blocks. Both come from limits of the game (`docs/FORK.md`, "Wider streets").
+
+Not run in a game. Not in this build: the mod raising the pools itself, and each game's pool sizes shown to the
+other players.
+
+## New in test build 8
 
 - **The driver's game makes the streets.** In a car two players share, the passers-by and traffic are made by the
   game of the player at the wheel, so what the driver runs into is its own and answers at once. Not during the
@@ -24,7 +43,7 @@ people and traffic.
   killed. It ends within a second of the panel's Stop now (the fix is in the server: Reinstall the panel's server
   with this release).
 
-The first two are new ground and were not run in a game. Either switch set to 0 in F8 gives the earlier behaviour.
+The first two were not run in a game. Either switch set to 0 in F8 gives the earlier behaviour.
 
 ## New in test build 7
 
@@ -123,7 +142,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.8` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.9` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 
@@ -183,8 +202,7 @@ Combat (2 or more players in the game)
 ## Not in this build
 
 Hosting from a dedicated server in the game (the F9 window still starts its own server), host migration without a
-reload, 10 players, contests for more than two, spawn distance settings, train boarding in missions, mission
-reinforcements.
+reload, 10 players, contests for more than two, train boarding in missions, mission reinforcements.
 
 ## Engine addresses
 
