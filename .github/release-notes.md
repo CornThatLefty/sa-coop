@@ -1,8 +1,26 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 5: co-op balance (combat scaling, shop prices, split payouts),
-server fixes (world backups, host choice, game id, password cooldown), and the server for Linux.
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 6: the server's settings in the game (F8), player options in
+the F2 window, and a host that joins a standing server loads that server's world.
 
-It does not connect to upstream 0.3.4 (protocol 64). It plays with test builds 1 to 4, but each fix works only in the
-game of a player who has this build, and the server fixes only on a host that has it, so every player should install it.
+Every player and the server need this build: it does not connect to test builds 1 to 5 or to upstream 0.3.4
+(protocol 65). A Linux or panel server is updated with the same release (the egg's Reinstall).
+
+## New since test build 5
+
+- **Server settings window, F8.** The server's settings on three tabs (Server, Combat, Economy): rules, player
+  count, passwords, admins, every balance value. The host of a game started from F9 and a server's admins change
+  them there; a change is in effect at once, is written to `server.ini` and is told in the chat. Other players see
+  the values.
+  To check: the host turns `Friendly fire` on in F8: every player gets the chat line and can be hurt at once; a
+  partner's F8 shows the values with no controls; `Weapon price` changed in F8 shows in `/balance` for everyone.
+- **Player options in the F2 window.** `Name tags over players` (moved here from F9) and `Chat on screen`. Each
+  player's own, kept in `coop\coop.ini`. With the chat off its lines are hidden until T is pressed.
+- **Host of a standing server.** A player who joins a Linux or panel server and gets the host role loads the world
+  that server keeps, instead of being asked for a save. With no world there the choice is asked as before. An
+  admin's `/newgame` clears the server's world for another story.
+  To check: the host leaves and joins again: its game loads the server's world with no question, and partners keep
+  their profiles (money, weapons).
+- **Linux server.** Logs `Server ready on UDP port N`; `egg-sa-coop-server.json` for a Pelican panel is in the
+  archive, and its `Release` variable takes `latest`.
 
 ## New since test build 4
 
@@ -66,7 +84,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.5` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.6` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 

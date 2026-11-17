@@ -7,6 +7,7 @@
 
 #include "common/api/protocol/Balance.h"
 #include "common/api/protocol/Protocol.h"
+#include "common/api/protocol/Settings.h"
 #include "common/lib/buffer/Buffer.h"
 #include "shared/api/net-client/NetClient.h"
 
@@ -46,6 +47,16 @@ public:
     // in this session (0: none yet)
     const proto::Balance& Balance() const { return m_balance; }
     uint32_t BalanceRevision() const { return m_balanceRevision; }
+    // The server's settings as it sent them last (S_SETTINGS; empty until asked for), for the F8 window. Revision: counts
+    // the ones received in this session. A change goes out one setting at a time and comes back in a new S_SETTINGS.
+    const proto::Settings& ServerSettings() const { return m_settings; }
+    uint32_t SettingsRevision() const { return m_settingsRevision; }
+    void RequestSettings();
+    void SetSetting(const std::string& section, const std::string& key, const std::string& value);
+    // what the welcome said of the server's own world and of the game its profiles belong to (S_HOST_CHANGED names the
+    // game again): a host that joined a server standing on its own plays that world (entities/session)
+    bool ServerHasWorld() const { return m_serverHasWorld; }
+    uint32_t ServerGameId() const { return m_serverGameId; }
     const std::map<uint8_t, PeerInfo>& Peers() const { return m_peers; }
     const PeerInfo* Peer(uint8_t id) const;
     std::string PeerName(uint8_t id) const;
@@ -70,6 +81,7 @@ public:
     std::function<void(uint8_t id)> onPeerLeave;
     std::function<void(uint8_t newHost)> onHostChanged;
     std::function<void(const std::string&)> onInvite;      // the server learned its invite code
+    std::function<void()> onRules;                          // the game's rules changed while it runs (S_RULES)
     uint32_t (*nameColour)(uint8_t id) = nullptr;           // a player's nickname in the chat (ARGB; entities/player)
     const std::string& InviteCode() const { return m_inviteCode; }
 
@@ -92,6 +104,10 @@ private:
     bool m_partnerCheats = true;
     proto::Balance m_balance;
     uint32_t m_balanceRevision = 0;
+    proto::Settings m_settings;
+    uint32_t m_settingsRevision = 0;
+    bool m_serverHasWorld = false;
+    uint32_t m_serverGameId = 0;
     std::string m_inviteCode;
     std::map<uint8_t, PeerInfo> m_peers;
     Handler m_handlers[256] = {};

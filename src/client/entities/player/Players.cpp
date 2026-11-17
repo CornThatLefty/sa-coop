@@ -2809,6 +2809,14 @@ void Players::SetNameTags(bool on) {
     ini.Save(Cfg().iniPath);
 }
 
+void Players::SetChatShown(bool on) {
+    Cfg().chat = on;
+    Ini ini;
+    ini.Load(Cfg().iniPath);
+    ini.Set("game", "chat", on ? "1" : "0");
+    ini.Save(Cfg().iniPath);
+}
+
 bool Players::OnCommand(const std::string& cmd, const std::vector<std::string>& args) {
     // the names over the other players, on or off without leaving the game for coop.ini (name_tags was a line of the
     // file alone): /names turns them over, /names on and /names off set them

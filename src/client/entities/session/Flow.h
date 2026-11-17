@@ -41,12 +41,18 @@ void OnWorldNone();        // partner: no world to load yet, the server sends it
 void OnNewGameFromHost();  // partner: the prologue is over (no save of it yet): a new game of its own, next to the host
 bool IsFollower();         // partner: in that new game until the host's first save arrives
 bool InHostWorld();
+// host: the game that starts now is the world a server standing on its own keeps (asked for on joining it), not a save
+// of this player's. True once per such load: the caller is the one that names the game to the server (features/progress).
+bool TakeHostServerWorld();
 bool HostWorldWaiting();  // partner: the host's world after its progress waits to load (at the next mission's start point)
 bool HostWorldLoading();  // partner: and loads now (the screen going dark for it, or the load itself)
 // online and in the world both games share: the host always, a partner once it plays the host's world (before that
 // its pickups, purchases, cheats and the host's ones belonged to two different worlds)
 bool InSharedWorld();        // partner: playing the host's world (not its own game while it waits, not during a prologue)
 void WorldProgressed();    // host: the story moved on, the partners in the game get the world again
+// The game's rules changed while it runs (the F8 window): the host of a game started from the F9 window keeps them as
+// that window's choices for the next game, since its server starts with what coop.ini says
+void OnRulesChanged();
 
 // partner: where it stood before a reload of the host's world after its progress, put back after the load
 struct SavedSpot {

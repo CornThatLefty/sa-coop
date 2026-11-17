@@ -2,9 +2,9 @@
     "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PANEL",
     "meta": {
         "version": "PLCN_v2",
-        "update_url": null
+        "update_url": "https://raw.githubusercontent.com/CornThatLefty/sa-coop/main/deploy/linux/egg-sa-coop-server.json"
     },
-    "exported_at": "2026-11-17T00:00:00+00:00",
+    "exported_at": "2026-11-17T06:00:00+00:00",
     "name": "SA:COOP Server",
     "author": "sa-coop-fork@users.noreply.github.com",
     "uuid": "f8fccde7-5819-4138-85ef-447e40bad86b",
@@ -26,7 +26,7 @@
     },
     "scripts": {
         "installation": {
-            "script": "#!/bin/bash\n# SA:COOP dedicated server: the release's Linux archive into /mnt/server.\n# A reinstall replaces the program and keeps server.ini, balance_exclude.ini and server-data.\nset -e\napt-get update -y\napt-get install -y curl ca-certificates tar\nmkdir -p /mnt/server /tmp/sa-coop\ncd /tmp/sa-coop\ncurl -fsSL -o server.tar.gz \"https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/coop-server-linux-x86_64.tar.gz\"\ntar -xzf server.tar.gz --strip-components=1\ncp coop-server /mnt/server/coop-server\nchmod +x /mnt/server/coop-server\nfor f in server.ini balance_exclude.ini; do\n    [ -f \"/mnt/server/$f\" ] || cp \"$f\" \"/mnt/server/$f\"\ndone\ncp README.md /mnt/server/README.md\necho \"SA:COOP server ${VERSION} installed\"\n",
+            "script": "#!/bin/bash\n# SA:COOP dedicated server: a release's Linux archive into /mnt/server.\n# A reinstall replaces the program and keeps server.ini, balance_exclude.ini and server-data.\n# VERSION \"latest\": the newest release of the repository, test builds (pre-releases) included.\nset -e\napt-get update -y\napt-get install -y curl ca-certificates tar\nif [ -z \"${VERSION}\" ] || [ \"${VERSION}\" = \"latest\" ]; then\n    VERSION=$(curl -fsSL \"https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1\" | grep -m1 '\"tag_name\"' | cut -d'\"' -f4)\n    if [ -z \"${VERSION}\" ]; then\n        echo \"No release found in ${GITHUB_REPO}\"\n        exit 1\n    fi\nfi\nmkdir -p /mnt/server /tmp/sa-coop\ncd /tmp/sa-coop\ncurl -fsSL -o server.tar.gz \"https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/coop-server-linux-x86_64.tar.gz\"\ntar -xzf server.tar.gz --strip-components=1\ncp coop-server /mnt/server/coop-server\nchmod +x /mnt/server/coop-server\nfor f in server.ini balance_exclude.ini; do\n    [ -f \"/mnt/server/$f\" ] || cp \"$f\" \"/mnt/server/$f\"\ndone\ncp README.md /mnt/server/README.md\necho \"${VERSION}\" > /mnt/server/release.txt\necho \"SA:COOP server ${VERSION} installed\"\n",
             "container": "ghcr.io/pelican-eggs/installers:debian",
             "entrypoint": "bash"
         }
@@ -35,9 +35,9 @@
         {
             "sort": 1,
             "name": "Release",
-            "description": "Release tag of the fork to install, as on its releases page.",
+            "description": "Release tag of the fork to install, as on its releases page. latest: the newest release at the time of the install, test builds included.",
             "env_variable": "VERSION",
-            "default_value": "v0.3.4-fork.5",
+            "default_value": "latest",
             "user_viewable": true,
             "user_editable": true,
             "rules": [

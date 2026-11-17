@@ -10,6 +10,7 @@
 
 #include "common/api/protocol/Balance.h"
 #include "common/api/protocol/Protocol.h"
+#include "common/api/protocol/Settings.h"
 #include "common/lib/buffer/Buffer.h"
 #include "features/internet/Internet.h"
 
@@ -135,11 +136,21 @@ private:
     std::wstring GameIdPath() const { return m_cfg.dataDir + L"world\\game.id"; }
     bool LoadWorld(const std::wstring& path, const std::string& label);
 
+    // The settings from the game (Settings.cpp): the F8 window of a player with the admin's rights changes them
+    void SendSettings(Player& p);                    // S_SETTINGS as that player may see them
+    void HandleSettingsSet(Player& p, Reader& r);    // C_SETTINGS_SET
+    void SendRules(Player* to);                      // to == nullptr: everyone
+    std::string ServerSettingValue(const std::string& key) const;
+    // false: not a value for that key. shown: the value as the chat and the log say it
+    bool ApplyServerSetting(const std::string& key, const std::string& value, std::string& stored, std::string& shown);
+    void PersistSetting(const std::string& section, const std::string& key, const std::string& value);
+
     void SendInvite(Player* to);  // to == nullptr: everyone
     void LoadBalanceFiles();       // [balance] of server.ini and balance_exclude.ini, as they are now
     void SendBalance(Player* to);  // to == nullptr: everyone
 
     Config m_cfg;
+    std::map<std::string, std::string> m_restartSettings;  // changed from the game, in effect from the next start: as written
     ENetHost* m_host = nullptr;
     Internet m_internet;
     // the last slot only holds a connection until its hello: a player back after a crash while its old connection still holds

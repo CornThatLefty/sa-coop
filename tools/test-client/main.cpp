@@ -29,6 +29,7 @@
 #include "common/api/net/Net.h"
 #include "common/api/protocol/Balance.h"
 #include "common/api/protocol/Protocol.h"
+#include "common/api/protocol/Settings.h"
 #include "common/config/version/Version.h"
 #include "common/lib/buffer/Buffer.h"
 #include "common/lib/util/Util.h"
@@ -118,6 +119,22 @@ static void OnService(uint8_t id, Reader& r, std::vector<uint8_t>& world, uint32
                    Crc32(world.data(), world.size()) == worldCrc));
         break;
     case S_WORLD_NONE: Say("EVT WORLD_NONE"); break;
+    case S_SETTINGS: {
+        Settings s;
+        bool ok = s.Read(r);
+        std::string line = Format("EVT SETTINGS ok=%d edit=%d n=%zu", ok, s.canEdit, s.items.size());
+        for (auto& it : s.items)
+            line += Format(" %s.%s=%s;k%d;f%d", it.section.c_str(), it.key.c_str(), Flat(it.value).c_str(), it.kind, it.flags);
+        Say(line);
+        break;
+    }
+    case S_RULES: {
+        Rules rules;
+        bool ok = rules.Read(r);
+        Say(Format("EVT RULES ok=%d name=%s ff=%d tp=%d life=%d cheats=%d", ok, Flat(rules.serverName).c_str(), rules.friendlyFire,
+                   rules.partnerTeleport, rules.sharedLife, rules.partnerCheats));
+        break;
+    }
     case S_HOST_CHANGED: {
         uint8_t host = r.U8();
         uint32_t game = r.Remaining() >= 4 ? r.U32() : 0;
@@ -201,6 +218,18 @@ static bool Run(ENetPeer* peer, const std::string& line, bool& graceful) {
         std::string path, label;
         p >> path >> label;
         Upload(peer, path, label);
+    } else if (cmd == "settings") {
+        Send(peer, CH_RELIABLE, Writer(C_SETTINGS_GET));
+    } else if (cmd == "set") {  // set <section> <key> [value]
+        std::istringstream p(rest);
+        std::string section, key, value;
+        p >> section >> key;
+        std::getline(p, value);
+        Writer w(C_SETTINGS_SET);
+        w.Str(section, 16);
+        w.Str(key, 40);
+        w.Str(Trim(value), 512);
+        Send(peer, CH_RELIABLE, w);
     } else if (cmd == "request") {
         Send(peer, CH_BULK, Writer(C_WORLD_REQUEST));
     } else if (cmd == "keep") {

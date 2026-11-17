@@ -71,6 +71,7 @@ bool ClientConfig::Load(const std::wstring& coopDirectory) {
     markColour = ini.Get("game", "mark_colour", "");
     partnerArrow = ini.GetBool("game", "partner_arrow", partnerArrow);
     nameTags = ini.GetBool("game", "name_tags", nameTags);
+    chat = ini.GetBool("game", "chat", chat);
     gps = ini.GetBool("game", "gps", gps);
 
     voiceEnabled = ini.GetBool("voice", "enabled", voiceEnabled);
