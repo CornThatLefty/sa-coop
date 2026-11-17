@@ -262,7 +262,8 @@ bool g_hostCutscene = false;
 // partner's screen where the partner stood, a CJ in the air before a white background, with no girl (#100).
 bool g_cutsceneOwn = false;
 std::string g_missionName;
-int32_t g_moneyAtStart = 0;  // the partner gets what the host earned during the mission
+int32_t g_moneyAtStart = 0;  // host: the wallet at the mission's start (for the log: what it gained beside the script's pay)
+int32_t g_missionPaid = 0;   // host: what the story mission's own script paid so far (ADD_SCORE): its reward, shared out
 char g_cutsceneName[32] = {};  // last loaded cutscene, for partners joining during it
 
 // mission markers: the host's mission starts once the partner stands in the marker too
@@ -456,9 +457,8 @@ struct Side {
     std::string name;         // our own activity that may be shared, while it runs
     uint64_t offerUntil = 0;  // its call can be made until then (0: made, or too late)
     bool offered = false;     // made, no answer yet
-    int32_t moneyAtStart = 0;
+    int32_t earned = 0;       // what its own script paid us since its start (ADD_SCORE, NoteScriptPay)
     int32_t paid = 0;         // what of it who joined ours has had its part of so far
-    int32_t kept = 0;         // what the payout mode took back from us of it (entities/balance): still money it brought
     std::vector<uint8_t> with;  // who joined ours
     uint8_t owner = 0xFF;     // whose we joined
     bool hostLeads = false;   // the host's marks and texts are of a joint side activity (partner: not ours unless we joined)
@@ -471,7 +471,6 @@ struct Side {
     // joined a taxi job, our own one runs too: one fare at a time near its player, each drives its own (27.10: both work,
     // not one with the other sitting in its car). Its texts, marks and timers are ours then, the money goes to both.
     bool parallel = false;
-    int32_t received = 0;  // what the other's job paid us while our own ran: not ours to pay on
     uint64_t taxiAt = 0;   // joined a taxi job, at the wheel of our own taxi: our own job starts then (StartOwnTaxi)
 } g_side;
 bool SideOwning() { return !g_side.with.empty(); }
@@ -479,6 +478,16 @@ bool SideJoined() { return g_side.owner != 0xFF; }
 bool SideHelps(uint8_t id) { return std::find(g_side.with.begin(), g_side.with.end(), id) != g_side.with.end(); }
 // our valet shift (valet.scm, a streamed script, no mission) with the other player in it: its texts, marks and answers go
 // as a side activity's
+// ADD_SCORE of this game's player, as the command read it (player, amount). What a story mission's or a job's own script
+// pays is its reward, and that alone is shared out. The measure was the wallet's gain from the start to the end, as
+// upstream has it: cash picked up from the dead went to every player as a "mission reward" ($21, $141 and $58 in three
+// missions whose scripts pay nothing, 16.11), and a job's owner shared the cash it picked up while driving. Money a
+// script takes (a negative amount) counts against what it pays.
+void NoteScriptPay(void* script, const int32_t* p) {
+    if (p[0] != 0 || !p[1]) return;
+    if (Net().IsHost() && MissionThread(script)) g_missionPaid += p[1];
+    else if (!g_side.name.empty() && !_strnicmp(Field<char[8]>(script, 0x08), g_side.name.c_str(), 8)) g_side.earned += p[1];
+}
 bool JointValet(void* script) { return Net().Online() && SideOwning() && g_side.name == "valet" && jobs::ValetThread(script); }
 // A joint side activity's coronas (KICKSTA's 33, drawn each frame by DRAW_CORONA): to the other player as its markers, by
 // their place (the command's own id is its ip, the same for all of them)
@@ -2035,6 +2044,7 @@ int8_t ScriptCommand(void* script, void* handler, int command) {
         return ((CommandHandlerFn)Ref<void*>(0x8A6168))(script, 0x004E);  // TERMINATE_THIS_SCRIPT, as for a handler that is not code
     }
     if (story) rules::AfterCommand(op, ip);
+    if (op == 0x0109 && Net().Online()) NoteScriptPay(script, (const int32_t*)0xA43C78);  // ADD_SCORE; CTheScripts::ScriptParams
     // DONT_REMOVE_OBJECT takes the object off the mission's list, the same frame it was made: the cabins of "Deconstruction",
     // the doors of "Small Town Bank" and the rest never reached the partner (HostScan reads that list)
     if (story && op == 0x01C7) AnnounceKeptObject(Ref<int32_t>(0xA43C78));
@@ -4822,15 +4832,15 @@ void StartParallel() {
     ClearPartnerOnscreen();
     LOGI("Our own taxi job next to %s's: the fares' money goes to both", Net().PeerName(g_side.owner).c_str());
 }
-// the money our own job brought since its start, less what the other's paid us meanwhile
-int32_t SideEarned() { return PlayerInfos()[0].money + g_side.kept - g_side.moneyAtStart - g_side.received; }
+// the money our own job's script paid us since its start: not the wallet's gain, cash picked up meanwhile stays ours
+int32_t SideEarned() { return g_side.earned; }
 // A part of our job's money goes out by the payout mode (entities/balance): to who joined ours (to 0xFF: all of them), or
 // to the owner of the job we joined while our own taxi job runs beside it. Each gets the part we keep ourselves; the
 // rest of what the script paid us is taken back.
 void PayPart(uint8_t op, uint8_t to, int32_t amount) {
     int recipients = to == 0xFF ? 1 + (int)g_side.with.size() : 2;
     int32_t part = balance::Share(amount, recipients);
-    g_side.kept += balance::TakeBack(amount, part);
+    balance::TakeBack(amount, part);
     SendSide(op, to, g_side.name, part);
     if (part != amount)
         ui::TheChat().AddSystem(Format(TR("За задание: $%d из $%d%s.", "Job pay: $%d of $%d%s."), part, amount,
@@ -4989,10 +4999,8 @@ void SideUpdate() {
         g_side.name = name;
         g_side.offerUntil = NowMs() + 20000;
         g_side.offered = false;
-        g_side.moneyAtStart = PlayerInfos()[0].money;
+        g_side.earned = 0;
         g_side.paid = 0;
-        g_side.kept = 0;
-        g_side.received = 0;
         g_baseline.clear();
         for (int i = 0; i < kNumTraces; ++i)
             if (Ref<uint8_t>(Trace(i) + 0x25) & 2) g_baseline.insert(((uint32_t)Ref<uint16_t>(Trace(i) + 0x14) << 8) | (uint32_t)i);
@@ -5216,7 +5224,6 @@ void HandleSide(uint8_t from, Reader& r) {
         ui::TheChat().AddSystem(Format(TR("Конец %s.", "That is the end of %s."), JobOf(name).c_str()));
         if (money > 0 && money <= 10000000) {
             PlayerInfos()[0].money += money;
-            g_side.received += money;  // our own taxi job goes on: not its money
             ui::TheChat().AddSystem(Format(TR("Награда за задание: $%d.", "Reward for the job: $%d."), money));
         }
         LOGI("%s's side activity over (%s), $%d", who.c_str(), name.c_str(), money);
@@ -5228,7 +5235,6 @@ void HandleSide(uint8_t from, Reader& r) {
         bool owner = SideJoined() && from == g_side.owner, helper = SideHelps(from);
         if ((!owner && !helper) || money <= 0 || money > 10000000) return;
         PlayerInfos()[0].money += money;
-        g_side.received += money;
         ui::TheChat().AddSystem(owner ? Format(TR("За задание: +$%d.", "For the job: +$%d."), money)
                                       : Format(TR("За пассажиров игрока %s: +$%d.", "For %s's fares: +$%d."), who.c_str(), money));
         LOGI("%s's side activity paid us $%d", who.c_str(), money);
@@ -5585,6 +5591,7 @@ private:
             g_sentBlips.clear();
             g_missionName.clear();
             g_moneyAtStart = PlayerInfos()[0].money;
+            g_missionPaid = 0;
             LOGI("Mission started (%s)", name.c_str());
         }
         if (active && name != g_missionName && !name.empty()) {
@@ -5603,10 +5610,13 @@ private:
             w.U8(BLIP_CLEAR);
             Net().Send(proto::CH_RELIABLE, w);
             Net().Send(proto::CH_RELIABLE, Writer(proto::G_MISSION_END));
-            // the story moved on: a mission passed (CStats::LastMissionPassedName). A failed attempt pays the partner
-            // nothing: the money the host picked up from the dead in it was no reward
+            // the story moved on: a mission passed (CStats::LastMissionPassedName). Its reward is what its own script
+            // paid the host (NoteScriptPay); what the host picked up in it stays the host's
             std::string passed((const char*)0xB78A00, strnlen((const char*)0xB78A00, 8));
-            if (int32_t earned = PlayerInfos()[0].money - g_moneyAtStart; earned > 0 && passed != g_lastPassed) {
+            int32_t gained = PlayerInfos()[0].money - g_moneyAtStart;
+            if (passed != g_lastPassed && g_missionPaid <= 0 && gained > 0)
+                LOGI("Mission reward: none, its script paid nothing; the $%d the host's wallet gained stays the host's", gained);
+            if (int32_t earned = std::exchange(g_missionPaid, 0); earned > 0 && passed != g_lastPassed) {
                 // by the payout mode (entities/balance): each player in the game gets the part the host keeps, and the
                 // rest of what the script paid the host is taken back
                 int recipients = balance::PlayerCount();
@@ -5619,7 +5629,8 @@ private:
                 Net().Send(proto::CH_RELIABLE, rw);
                 if (std::string note = balance::ShareNote(recipients); !note.empty())
                     ui::TheChat().AddSystem(Format(TR("Награда за миссию: $%d%s.", "Mission reward: $%d%s."), part, note.c_str()));
-                LOGI("Mission reward: $%d earned, $%d to each of %d players", earned, part, recipients);
+                LOGI("Mission reward: $%d paid by its script, $%d to each of %d players; $%d more gained by the host stays the host's",
+                     earned, part, recipients, gained - earned);
             }
             HostSendScreen(false);
             g_mapEdits.clear();    // its gates and buildings stay as it left them in both games
