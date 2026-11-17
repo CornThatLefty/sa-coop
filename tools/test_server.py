@@ -116,9 +116,9 @@ class Server:
         self.ini.write_text("[server]\nname = test\ninternet = 0\nbind = 127.0.0.1\nmax_players = 4\nbackup_minutes = 0\n" + body,
                             encoding="utf-8")
 
-    def start(self):
+    def start(self, stdin=subprocess.DEVNULL):
         cmd = [str(find_bin("coop-server")), "--config", str(self.ini), "--data", str(self.data), "--port", str(self.port)] + self.args
-        self.proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=self.dir)
+        self.proc = subprocess.Popen(cmd, stdin=stdin, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=self.dir)
         self.wait_log(r"порту|port", 8)
         return self
 
@@ -728,6 +728,36 @@ def next_host_gets_the_world_the_last_one_left(make):
     b.quit()
     a2 = s.join("Alice", expect_welcome=False)
     a2.expect(r"EVT PROFILE size=11 game=0C0FFEE0 text=alice-money")
+
+
+@test
+def linux_server_stops_on_quit_and_on_a_signal(make):
+    """A hosting panel stops the server by typing quit into its console, or with SIGTERM, while that console stays
+    open: the server has to end by itself (a panel's server hung there and had to be killed, 17.11). Linux alone: the
+    Windows server reads a real console, not a pipe."""
+    if os.name == "nt":
+        return
+
+    def ends(s, how):
+        try:
+            code = s.proc.wait(6)
+        except subprocess.TimeoutExpired:
+            raise Failure(f"the server did not end within 6 s of {how}; its log ends: {s.log()[-300:]!r}")
+        check(code == 0, f"the server ended with {code} after {how}")
+        check("Сервер остановлен" in s.log(), f"no orderly stop in the log after {how}")
+
+    s = make(start=False)
+    s.start(stdin=subprocess.PIPE)
+    a = s.join("Alice")
+    s.proc.stdin.write(b"quit\n")
+    s.proc.stdin.flush()
+    ends(s, "quit")
+    a.expect(r"EVT DISCONNECTED|EVT KICKED|EVT LEAVE|EVT END")
+
+    s2 = make(start=False)
+    s2.start(stdin=subprocess.PIPE)
+    s2.proc.terminate()  # SIGTERM
+    ends(s2, "SIGTERM")
 
 
 def settings_of(p):
