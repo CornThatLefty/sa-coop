@@ -13,7 +13,7 @@ std::string WideToUtf8(std::wstring_view s);
 uint64_t NowMs();
 double NowSeconds();
 
-// Directory containing the given module (or the executable for nullptr), with trailing backslash.
+// Directory containing the given module (or the executable for nullptr), with trailing backslash (a slash on Linux).
 std::wstring ModuleDir(void* module = nullptr);
 
 bool ReadFileBytes(const std::wstring& path, std::vector<uint8_t>& out);
@@ -21,6 +21,13 @@ bool ReadFileBytes(const std::wstring& path, std::vector<uint8_t>& out);
 bool WriteFileBytes(const std::wstring& path, const void* data, size_t size, bool durable = true);
 bool FileExists(const std::wstring& path);
 void EnsureDirectory(const std::wstring& path);
+bool RemoveFile(const std::wstring& path);
+bool RenameFile(const std::wstring& from, const std::wstring& to);    // over a file that is there
+bool CopyFileOver(const std::wstring& from, const std::wstring& to);  // the same
+// The path in UTF-8 as this system's own calls take it. Linux: the backslashes the server's code joins folders with
+// become slashes, so that code is one for both systems.
+std::string NativePath(const std::wstring& path);
+void SleepMs(unsigned ms);
 
 uint32_t Crc32(const void* data, size_t size, uint32_t crc = 0);
 

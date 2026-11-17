@@ -1,10 +1,8 @@
 #include "app/server/Server.h"
 
-#include <windows.h>
-
 #include <algorithm>
 #include <cstring>
-#include <filesystem>
+#include <cwchar>
 #include <thread>
 #include <tuple>
 
@@ -74,8 +72,8 @@ bool Server::Start(const Config& cfg) {
         if (LoadWorld(m_cfg.worldFile, WideToUtf8(m_cfg.worldFile)))
             WriteFileBytes(WorldPath(), m_world.data(), m_world.size(), false);  // the network thread: no wait for the disk
     } else if (m_cfg.newGame) {
-        DeleteFileW(WorldPath().c_str());  // an older game's world: partners follow the new one instead
-        DeleteFileW(GameIdPath().c_str());
+        RemoveFile(WorldPath());  // an older game's world: partners follow the new one instead
+        RemoveFile(GameIdPath());
     } else if (LoadWorld(WorldPath(), "world.b")) {
         LoadGameId();  // the profiles of the stored world's game from the first join on, not the root folder's
     }
@@ -677,7 +675,7 @@ void Server::HostStartedNewGame() {
     if (!m_world.empty()) {
         m_world.clear();
         m_worldLabel.clear();
-        DeleteFileW(WorldPath().c_str());
+        RemoveFile(WorldPath());
         LOGI("Хост начал новую игру: сохранённый мир устарел и удалён");
     }
     m_prologue = true;
@@ -881,7 +879,7 @@ void Server::WaitProfileWrites() {
             std::lock_guard<std::mutex> lock(m_writeMutex);
             if (!m_writing) return;
         }
-        Sleep(10);
+        SleepMs(10);
     }
 }
 
@@ -1014,11 +1012,10 @@ bool Server::MayReplaceWorld(const Player& p) const {
 }
 
 void Server::RotateBackups() {
-    namespace fs = std::filesystem;
-    std::error_code ec;
-    fs::remove(BackupPath(kWorldBackups), ec);
-    for (int i = kWorldBackups - 1; i >= 1; --i) fs::rename(BackupPath(i), BackupPath(i + 1), ec);
-    fs::copy_file(WorldPath(), BackupPath(1), fs::copy_options::overwrite_existing, ec);
+    RemoveFile(BackupPath(kWorldBackups));
+    for (int i = kWorldBackups - 1; i >= 1; --i)
+        if (FileExists(BackupPath(i))) RenameFile(BackupPath(i), BackupPath(i + 1));
+    CopyFileOver(WorldPath(), BackupPath(1));
 }
 
 void Server::StoreWorld(std::vector<uint8_t>&& data, const std::string& label) {
@@ -1035,15 +1032,13 @@ void Server::ClearWorld() {
     RotateBackups();
     m_world.clear();
     m_worldLabel.clear();
-    std::error_code ec;
-    std::filesystem::remove(WorldPath(), ec);
+    RemoveFile(WorldPath());
     ++m_worldVersion;
 }
 
 void Server::SaveGameId() {
-    std::error_code ec;
     if (!m_gameId) {
-        std::filesystem::remove(GameIdPath(), ec);
+        RemoveFile(GameIdPath());
         return;
     }
     std::string text = Format("%08X", m_gameId);

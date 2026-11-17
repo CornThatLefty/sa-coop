@@ -12,6 +12,13 @@ SA:COOP build script (llvm-mingw, i686).
     python tools/build.py testclient   build coop-test-client.exe, the headless player of tools/test_server.py
 
 The toolchain is expected in toolchain/llvm-mingw (see tools/get-toolchain.ps1).
+
+On Linux the script builds the dedicated server alone, for the machine's own architecture, with the system's compiler
+(g++ 12 or later; CC and CXX name another):
+
+    python tools/build.py              build/release/bin/coop-server
+    python tools/build.py testclient   build/release/bin/coop-test-client, for tools/test_server.py
+    python tools/build.py dist         dist/coop-server-linux-x86_64.tar.gz: the server, its settings, the systemd unit
 """
 import argparse
 import concurrent.futures as futures
@@ -28,11 +35,18 @@ ROOT = Path(__file__).resolve().parent.parent
 TC = ROOT / "toolchain" / "llvm-mingw" / "bin"
 BUILD = ROOT / "build"
 
+LINUX = sys.platform.startswith("linux")  # the dedicated server's build (docs/FORK.md, "Linux server")
+EXE = "" if LINUX else ".exe"
+
 CC = TC / "i686-w64-mingw32-clang.exe"
 CXX = TC / "i686-w64-mingw32-clang++.exe"
 WINDRES = TC / "i686-w64-mingw32-windres.exe"
 
 COMMON_DEFS = ["-DWIN32_LEAN_AND_MEAN", "-DNOMINMAX", "-D_WIN32_WINNT=0x0601", "-D_CRT_SECURE_NO_WARNINGS"]
+if LINUX:
+    CC = Path(shutil.which(os.environ.get("CC", "gcc")) or "gcc")
+    CXX = Path(shutil.which(os.environ.get("CXX", "g++")) or "g++")
+    COMMON_DEFS = []
 WARN = ["-Wall", "-Wextra", "-Wno-unused-parameter", "-Wno-missing-field-initializers",
         "-Wno-invalid-offsetof", "-Wno-unused-function"]
 
@@ -49,9 +63,12 @@ def glob(base, *patterns):
     return out
 
 
+# what ENet's unix.c asks its configure script: all of it is there on any Linux of this century
+ENET_UNIX = ["-DHAS_FCNTL=1", "-DHAS_POLL=1", "-DHAS_GETADDRINFO=1", "-DHAS_GETNAMEINFO=1", "-DHAS_INET_PTON=1",
+             "-DHAS_INET_NTOP=1", "-DHAS_MSGHDR_FLAGS=1", "-DHAS_SOCKLEN_T=1"]
 ENET = lib("enet", [f"third_party/enet/{f}.c" for f in
-                    ("callbacks", "compress", "host", "list", "packet", "peer", "protocol", "win32")],
-           includes=["third_party/enet/include"], cflags=["-w"])
+                    ("callbacks", "compress", "host", "list", "packet", "peer", "protocol", "unix" if LINUX else "win32")],
+           includes=["third_party/enet/include"], defines=ENET_UNIX if LINUX else [], cflags=["-w"])
 MINHOOK = lib("minhook", ["third_party/minhook/src/buffer.c", "third_party/minhook/src/hook.c",
                           "third_party/minhook/src/trampoline.c", "third_party/minhook/src/hde/hde32.c"],
               includes=["third_party/minhook/include"], cflags=["-w"])
@@ -72,14 +89,14 @@ def targets(extra=()):
                  "-ldbghelp", "-lwinhttp"],
     }
     server = {
-        "name": "server", "kind": "exe", "out": "coop-server.exe",
+        "name": "server", "kind": "exe", "out": "coop-server" + EXE,
         "sources": glob("src/server", "**/*.cpp"),
-        "rc": glob("src/server", "*.rc"),
+        "rc": [] if LINUX else glob("src/server", "*.rc"),
         "includes": COMMON_INC + ["src/server"],
         "defines": ["-DCOOP_SERVER"], "cflags": [],
         "deps": [common, ENET],
-        "libs": ["-lws2_32", "-lwinmm", "-lwinhttp", "-lbcrypt"],
-        "ldflags": ["-municode"],
+        "libs": [] if LINUX else ["-lws2_32", "-lwinmm", "-lwinhttp", "-lbcrypt"],
+        "ldflags": [] if LINUX else ["-municode"],
     }
     # vorbisFile.dll: ASI loader for a game that has none (installed by "install.bat" of the package)
     loader = {
@@ -92,12 +109,14 @@ def targets(extra=()):
     }
     # coop-test-client.exe: a headless player for the server's tests (tools/test_server.py); not part of the package
     testclient = {
-        "name": "testclient", "kind": "exe", "out": "coop-test-client.exe",
+        "name": "testclient", "kind": "exe", "out": "coop-test-client" + EXE,
         "sources": glob("tools/test-client", "*.cpp"), "rc": [],
         "includes": COMMON_INC, "defines": [], "cflags": [],
         "deps": [common, ENET],
-        "libs": ["-lws2_32", "-lwinmm", "-lwinhttp", "-lbcrypt"],
+        "libs": [] if LINUX else ["-lws2_32", "-lwinmm", "-lwinhttp", "-lbcrypt"],
     }
+    if LINUX:  # the game and its loader are Windows programs
+        return {"server": server, "testclient": testclient}
     return {"client": client, "server": server, "loader": loader, "testclient": testclient}
 
 
@@ -156,6 +175,9 @@ def compile_one(src, obj, flags, is_c):
 def build_flags(t, debug):
     opt = ["-O0", "-g"] if debug else ["-O2", "-g"]
     inc = [f"-I{ROOT / i}" for i in t["includes"]]
+    if LINUX:
+        return opt + ["-pthread", "-fno-strict-aliasing", "-ffunction-sections", "-fdata-sections"] + \
+            t.get("defines", []) + inc + t.get("cflags", [])
     return opt + ["-gcodeview", "-m32", "-march=i686", "-mfpmath=sse", "-msse2", "-fno-strict-aliasing",
                   "-ffunction-sections", "-fdata-sections"] + COMMON_DEFS + t.get("defines", []) + inc + t.get("cflags", [])
 
@@ -229,7 +251,12 @@ def link_target(t, debug, objs, dep_objs):
     pdb = out.with_suffix(".pdb")
     cmd = [str(CXX), "-m32", "-static", "-g", "-gcodeview", f"-Wl,--pdb={pdb}", "-Wl,--gc-sections",
            "-o", str(out)] + t.get("ldflags", []) + [str(o) for o in all_objs] + t["libs"]
-    if not debug:
+    if LINUX:
+        # the C++ library inside the program: it then asks the machine for its C library alone (glibc), and runs on any
+        # distribution as new as the one it was built on
+        cmd = [str(CXX), "-pthread", "-static-libstdc++", "-static-libgcc", "-Wl,--gc-sections", "-o", str(out)] + \
+            [str(o) for o in all_objs] + t["libs"]
+    elif not debug:
         cmd.insert(1, "-Wl,--strip-debug")  # the DWARF sections (/4, /67...): the PDB holds what crash reports need
     if t["kind"] == "dll":
         cmd.insert(1, "-shared")
@@ -240,7 +267,7 @@ def link_target(t, debug, objs, dep_objs):
         print(r.stdout + r.stderr)
         print(f"  [{t['name']}] link FAILED")
         return False
-    if not debug:
+    if not debug and not LINUX:
         set_pe_checksum(out)
     listing.write_text(linked)
     print(f"  [{t['name']}] -> {out.relative_to(ROOT)}")
@@ -300,6 +327,30 @@ def assemble_dist(debug):
         print("dist: dist\\coop.pdb, for crash logs of this build")
 
 
+def assemble_linux_dist(debug):
+    """dist/coop-server-linux-x86_64.tar.gz: the server, deploy/linux (its settings, the systemd unit, the instructions)
+    and the settings' [balance] section, which the server itself writes as on a first start."""
+    name = "coop-server-linux-x86_64"
+    src = BUILD / ("debug" if debug else "release") / "bin"
+    dist = ROOT / "dist" / name
+    shutil.rmtree(dist, ignore_errors=True)
+    dist.mkdir(parents=True)
+    shutil.copy2(src / "coop-server", dist / "coop-server")
+    for f in sorted((ROOT / "deploy" / "linux").iterdir()):
+        shutil.copy2(f, dist / f.name)
+    r = subprocess.run([str(dist / "coop-server"), "--write-config", str(dist / "server.ini")], capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"dist: coop-server --write-config failed ({r.returncode}): {r.stdout}{r.stderr}")
+        return False
+    licenses = dist / "licenses"
+    licenses.mkdir()
+    shutil.copy2(ROOT / "LICENSE", licenses / "SA-COOP.txt")
+    shutil.copy2(ROOT / "third_party" / "enet" / "LICENSE", licenses / "ENet.txt")
+    archive = Path(shutil.make_archive(str(dist), "gztar", dist.parent, name))
+    print(f"dist: {archive.relative_to(ROOT)}, {archive.stat().st_size / 1e6:.1f} MB")
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("what", nargs="*", default=[])
@@ -313,11 +364,15 @@ def main():
         print("cleaned")
         return 0
     if not CXX.exists():
-        print(f"toolchain not found: {CXX}\nrun: powershell -ExecutionPolicy Bypass -File tools/get-toolchain.ps1")
+        print(f"compiler not found: {CXX} (CC and CXX name another)" if LINUX else
+              f"toolchain not found: {CXX}\nrun: powershell -ExecutionPolicy Bypass -File tools/get-toolchain.ps1")
         return 1
     extra = [str(p.resolve()) for d in args.extra for p in sorted(Path(d).glob("**/*.cpp"))]
     all_t = targets(extra)
     want = [w for w in args.what if w != "dist"] or [n for n in all_t if n != "testclient"]
+    if unknown := [w for w in want if w not in all_t]:
+        print(f"no such target here: {', '.join(unknown)} (there are: {', '.join(all_t)})")
+        return 1
     compdb = []
     ok = True
     built_deps = {}
@@ -340,7 +395,10 @@ def main():
                 ok &= link_target(t, args.debug, objs, dep_objs)
     (ROOT / "compile_commands.json").write_text(json.dumps(compdb, indent=1))
     if ok and "dist" in args.what:
-        assemble_dist(args.debug)
+        if LINUX:
+            ok = assemble_linux_dist(args.debug)
+        else:
+            assemble_dist(args.debug)
     print("BUILD OK" if ok else "BUILD FAILED")
     return 0 if ok else 1
 

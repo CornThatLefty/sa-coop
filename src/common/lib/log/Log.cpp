@@ -1,10 +1,18 @@
 #include "common/lib/log/Log.h"
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <sys/time.h>
+
+#include <ctime>
+#endif
 
 #include <cstdarg>
 #include <cstdio>
 #include <mutex>
+
+#include "common/lib/util/Util.h"
 
 namespace coop::log {
 
@@ -21,9 +29,13 @@ void Open(const std::wstring& path, bool alsoConsole) {
     std::wstring old = path;
     size_t dot = old.rfind(L'.');
     old.insert(dot == std::wstring::npos ? old.size() : dot, L".old");  // coop.log -> coop.old.log
-    MoveFileExW(path.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING);
+    RenameFile(path, old);
+#ifdef _WIN32
     g_file = _wfopen(path.c_str(), L"wb");
     if (g_file) fputs("\xEF\xBB\xBF", g_file);  // UTF-8 BOM so Notepad shows Cyrillic correctly
+#else
+    g_file = fopen(NativePath(path).c_str(), "wb");  // no BOM: grep and tail would show it as the first line's start
+#endif
     g_console = alsoConsole;
 }
 
@@ -38,12 +50,21 @@ void Write(Level lvl, const char* fmt, ...) {
     vsnprintf(msg, sizeof(msg), fmt, ap);
     va_end(ap);
 
-    SYSTEMTIME st;
-    GetLocalTime(&st);
     static const char* names[] = {"DBG", "INF", "WRN", "ERR"};
     char line[4300];
+#ifdef _WIN32
+    SYSTEMTIME st;
+    GetLocalTime(&st);
     snprintf(line, sizeof(line), "[%02d:%02d:%02d.%03d] %s %s\n", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
              names[(int)lvl], msg);
+#else
+    timeval tv{};
+    gettimeofday(&tv, nullptr);
+    tm st{};
+    localtime_r(&tv.tv_sec, &st);
+    snprintf(line, sizeof(line), "[%02d:%02d:%02d.%03d] %s %s\n", st.tm_hour, st.tm_min, st.tm_sec, (int)(tv.tv_usec / 1000),
+             names[(int)lvl], msg);
+#endif
 
     // a fault in here with the lock held, reported by the crash handler on the same thread, waited for itself
     static thread_local bool writing = false;

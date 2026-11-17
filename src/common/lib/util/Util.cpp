@@ -1,11 +1,25 @@
 #include "common/lib/util/Util.h"
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+
+#include <algorithm>
+#include <filesystem>
+#endif
 
 #include <cstdarg>
 #include <cstdio>
 
 namespace coop {
+
+// The first half is the system's: Windows for the game and the server players host from it, Linux for the dedicated
+// server (docs/FORK.md, "Linux server"). The second half is the same code for both.
+#ifdef _WIN32
 
 std::wstring Utf8ToWide(std::string_view s) {
     if (s.empty()) return {};
@@ -98,6 +112,165 @@ void EnsureDirectory(const std::wstring& path) {
     if (!cur.empty()) CreateDirectoryW(cur.c_str(), nullptr);
 }
 
+bool RemoveFile(const std::wstring& path) { return DeleteFileW(path.c_str()) != 0; }
+bool RenameFile(const std::wstring& from, const std::wstring& to) {
+    return MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+}
+bool CopyFileOver(const std::wstring& from, const std::wstring& to) { return CopyFileW(from.c_str(), to.c_str(), FALSE) != 0; }
+std::string NativePath(const std::wstring& path) { return WideToUtf8(path); }
+void SleepMs(unsigned ms) { Sleep(ms); }
+
+static void LowerWide(std::wstring& w) { CharLowerBuffW(w.data(), (DWORD)w.size()); }
+
+#else  // ---------------------------------------------------------------------------------------------------- Linux
+
+// wchar_t holds a whole code point here (UTF-32), two halves of one on Windows (UTF-16): the texts are the same up to
+// U+FFFF, which is all a nickname may hold
+std::wstring Utf8ToWide(std::string_view s) {
+    std::wstring out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size();) {
+        uint8_t c = (uint8_t)s[i];
+        uint32_t cp = 0xFFFD;  // what a broken sequence becomes, one byte at a time
+        size_t n = 1;
+        if (c < 0x80) cp = c;
+        else if ((c & 0xE0) == 0xC0) n = 2, cp = c & 0x1F;
+        else if ((c & 0xF0) == 0xE0) n = 3, cp = c & 0x0F;
+        else if ((c & 0xF8) == 0xF0) n = 4, cp = c & 0x07;
+        bool whole = i + n <= s.size();
+        for (size_t k = 1; k < n && whole; ++k) {
+            uint8_t t = (uint8_t)s[i + k];
+            if ((t & 0xC0) != 0x80) whole = false;
+            else cp = cp << 6 | (t & 0x3F);
+        }
+        if (!whole) cp = 0xFFFD, n = 1;
+        out += (wchar_t)cp;
+        i += n;
+    }
+    return out;
+}
+
+std::string WideToUtf8(std::wstring_view s) {
+    std::string out;
+    out.reserve(s.size());
+    for (wchar_t w : s) {
+        uint32_t cp = (uint32_t)w;
+        if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) cp = 0xFFFD;
+        if (cp < 0x80) {
+            out += (char)cp;
+        } else if (cp < 0x800) {
+            out += (char)(0xC0 | cp >> 6);
+            out += (char)(0x80 | (cp & 0x3F));
+        } else if (cp < 0x10000) {
+            out += (char)(0xE0 | cp >> 12);
+            out += (char)(0x80 | ((cp >> 6) & 0x3F));
+            out += (char)(0x80 | (cp & 0x3F));
+        } else {
+            out += (char)(0xF0 | cp >> 18);
+            out += (char)(0x80 | ((cp >> 12) & 0x3F));
+            out += (char)(0x80 | ((cp >> 6) & 0x3F));
+            out += (char)(0x80 | (cp & 0x3F));
+        }
+    }
+    return out;
+}
+
+static uint64_t MonotonicNs() {
+    timespec t{};
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec;
+}
+
+uint64_t NowMs() { return MonotonicNs() / 1000000ull; }
+double NowSeconds() { return (double)MonotonicNs() / 1e9; }
+
+std::wstring ModuleDir(void*) {
+    char buf[4096];
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf));
+    std::string p(buf, n > 0 ? (size_t)n : 0);
+    size_t slash = p.rfind('/');
+    return slash == std::string::npos ? L"./" : Utf8ToWide(p.substr(0, slash + 1));
+}
+
+// The server's code joins its folders with backslashes ("world\\world.b" after the data folder): slashes here
+std::string NativePath(const std::wstring& path) {
+    std::string p = WideToUtf8(path);
+    std::replace(p.begin(), p.end(), '\\', '/');
+    return p;
+}
+
+bool ReadFileBytes(const std::wstring& path, std::vector<uint8_t>& out) {
+    int fd = open(NativePath(path).c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return false;
+    struct stat st{};
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size > 512ll * 1024 * 1024) {
+        close(fd);
+        return false;
+    }
+    out.resize((size_t)st.st_size);
+    size_t got = 0;
+    while (got < out.size()) {
+        ssize_t n = read(fd, out.data() + got, out.size() - got);
+        if (n <= 0) break;
+        got += (size_t)n;
+    }
+    close(fd);
+    return got == out.size();
+}
+
+bool WriteFileBytes(const std::wstring& path, const void* data, size_t size, bool durable) {
+    std::string to = NativePath(path), tmp = to + ".tmp";
+    int fd = open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    if (fd < 0) return false;
+    size_t put = 0;
+    while (put < size) {
+        ssize_t n = write(fd, (const uint8_t*)data + put, size - put);
+        if (n <= 0) break;
+        put += (size_t)n;
+    }
+    bool ok = put == size && (!durable || fsync(fd) == 0);  // a power cut left an empty profile
+    ok = close(fd) == 0 && ok;
+    if (!ok) {
+        unlink(tmp.c_str());
+        return false;
+    }
+    return rename(tmp.c_str(), to.c_str()) == 0;
+}
+
+bool FileExists(const std::wstring& path) {
+    struct stat st{};
+    return stat(NativePath(path).c_str(), &st) == 0 && S_ISREG(st.st_mode);
+}
+
+void EnsureDirectory(const std::wstring& path) {
+    std::error_code ec;
+    std::filesystem::create_directories(NativePath(path), ec);
+}
+
+bool RemoveFile(const std::wstring& path) { return unlink(NativePath(path).c_str()) == 0; }
+bool RenameFile(const std::wstring& from, const std::wstring& to) {
+    return rename(NativePath(from).c_str(), NativePath(to).c_str()) == 0;
+}
+bool CopyFileOver(const std::wstring& from, const std::wstring& to) {
+    std::vector<uint8_t> bytes;
+    return ReadFileBytes(from, bytes) && WriteFileBytes(to, bytes.data(), bytes.size(), false);
+}
+
+void SleepMs(unsigned ms) {
+    timespec t{(time_t)(ms / 1000), (long)(ms % 1000) * 1000000l};
+    nanosleep(&t, nullptr);
+}
+
+// Latin and Cyrillic, the letters a nickname may hold (SanitizeNickname), and the accented Latin ones of Latin-1
+static void LowerWide(std::wstring& w) {
+    for (wchar_t& c : w) {
+        if ((c >= L'A' && c <= L'Z') || (c >= 0x0410 && c <= 0x042F) || (c >= 0x00C0 && c <= 0x00DE && c != 0x00D7)) c += 0x20;
+        else if (c >= 0x0400 && c <= 0x040F) c += 0x50;
+    }
+}
+
+#endif  // ------------------------------------------------------------------------------------- the same for both
+
 uint32_t Crc32(const void* data, size_t size, uint32_t crc) {
     static uint32_t table[256];
     static bool init = false;
@@ -124,7 +297,7 @@ std::string Trim(std::string_view s) {
 
 std::string ToLower(std::string_view s) {
     std::wstring w = Utf8ToWide(s);
-    CharLowerBuffW(w.data(), (DWORD)w.size());
+    LowerWide(w);
     return WideToUtf8(w);
 }
 
