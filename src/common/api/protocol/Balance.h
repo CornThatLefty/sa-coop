@@ -40,6 +40,7 @@ enum BalanceKey : uint8_t {
     BK_SPAWN_SCALE,  // how many times farther out the engine makes and removes its people and traffic
     BK_PED_DENSITY,  // people on the streets
     BK_CAR_DENSITY,  // traffic
+    BK_SYNC_HANDOVER,  // a passer-by or car far from its game's player goes to the game of the player nearer it (0 or 1)
     BK_COUNT
 };
 
@@ -79,10 +80,13 @@ inline constexpr BalanceKeyInfo kBalanceKeys[BK_COUNT] = {
     {"spawn_scale", 1.0f, 1.0f, 1.0f, 2.0f},
     {"ped_density", 1.0f, 1.0f, 0.0f, 4.0f},
     {"car_density", 1.0f, 1.0f, 0.0f, 4.0f},
+    {"sync_handover", 1.0f, 1.0f, 0.0f, 1.0f},
 };
 
 // a key that is a switch: 0 or 1 in server.ini, a checkbox in the F8 window
-inline bool BalanceKeyIsFlag(int key) { return key == BK_SYNC_DRIVER_LEADS || key == BK_SYNC_INSTANT_HITS; }
+inline bool BalanceKeyIsFlag(int key) {
+    return key == BK_SYNC_DRIVER_LEADS || key == BK_SYNC_INSTANT_HITS || key == BK_SYNC_HANDOVER;
+}
 
 inline int BalanceKeyByName(const std::string& lowerName) {
     for (int i = 0; i < BK_COUNT; ++i)

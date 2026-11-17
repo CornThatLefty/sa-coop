@@ -1,10 +1,26 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 9: people and traffic made farther out and in greater
-numbers, set on the server.
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 10: a crash of test build 9 guarded, people in a fight keep
+their fight, and a switch for people and cars passing between games.
 
-It connects to test builds 6 to 8 (protocol 65) and not to builds 1 to 5 or to upstream 0.3.4. Every player and
-the server need this build for the new settings: a game on an older build keeps the game's own range.
+It connects to test builds 6 to 9 (protocol 65) and not to builds 1 to 5 or to upstream 0.3.4. Every player and
+the server need this build for the new settings.
 
-## New since test build 8
+## Fixed since test build 9
+
+- **Crash at `4164655D`.** A passer-by's task for a held thing (a phone, a bag, a tray) used an object that was
+  already destroyed. The task now lets go of such an object. The game's list for clearing pointers to deleted people,
+  cars and objects holds 3000 entries and runs out with big pools and wider streets; the mod adds 27000.
+  To check: a long session with the range raised. `coop.log` has `Entity references: N free`, and
+  `A ped (model N) held a destroyed object` each time the guard acts. Both lines are worth a report.
+- **A person in a fight keeps its fight.** A passer-by fighting, shooting or fleeing, and a cop arresting or
+  pursuing, no longer passes to the other player's game. Before, it passed once 100 m from its own game's player and
+  became a calm stroller; with the range above 1.6 that was every hand-over.
+- **Switch: `People and cars pass to the nearer player's game`** (`sync_handover`, F8, Combat tab). Off, nothing
+  passes by distance: a person or car stays with its game while another player is next to it or sees it. A street
+  then thins around a player whose partner walked away or entered a building.
+
+Not run in a game. Which of two causes left the crash's pointer is not known from the crash log alone.
+
+## New in test build 9
 
 - **Wider streets.** Three settings on the new Streets tab of F8 (`[balance]` of `server.ini`), in effect at once in
   every game:
@@ -142,7 +158,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.9` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.10` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 
