@@ -50,6 +50,13 @@ bool g_prologueWait = false;        // partner: the host plays a new game's prol
 bool g_worldNone = false;           // partner: the server has no world for us yet (the host is still in the menu)
 bool g_hostWorldAsked = false;      // host of a server standing on its own: its world was asked for, to play it
 bool g_hostServerWorld = false;     // host: and loads now (the game that starts next is the server's: TakeHostServerWorld)
+bool g_guestHostNext = false;       // host: the same, for this file's own OnGameStarted
+// Host of a server standing on its own, in the world that server keeps: the world is everyone's and the host is its
+// guest. It plays its own character over it (features/progress), and what it changes in the world goes back to the
+// server while it plays and when it leaves, for whoever hosts next.
+bool g_guestHost = false;
+uint64_t g_lastUploadMs = 0;        // host: when a snapshot last went to the server
+constexpr uint64_t kGuestSnapshotMs = 5 * 60 * 1000;  // a guest host's world goes to the server that often
 uint64_t g_gameStartedAt = 0, g_snapshotTriedAt = 0;
 bool g_follower = false;            // partner: in a new game of its own next to the host, until its first save
 bool g_progressUpload = false;      // host: the next snapshot goes to the partners in the game as well
@@ -220,14 +227,15 @@ void UploadWorld(const std::vector<uint8_t>& data, const std::string& label) {
     }
     Writer e(C_WORLD_END);
     Net().Send(CH_BULK, e);
-    LOGI("World snapshot uploaded (%u bytes)", (unsigned)data.size());
+    g_lastUploadMs = NowMs();
+    LOGI("World snapshot uploaded (%u bytes, %s)", (unsigned)data.size(), label.c_str());
 }
 
 bool SameMainScm(const std::vector<uint8_t>& save);  // below
 
 void OnOnline() {
     auto& net = Net();
-    g_hostWorldAsked = g_hostServerWorld = false;
+    g_hostWorldAsked = g_hostServerWorld = g_guestHostNext = g_guestHost = false;
     if (net.IsHost()) {
         if (!g_isHosting && net.ServerHasWorld()) {
             // A server standing on its own (not the one this game started) that keeps a world: the host plays that
@@ -494,10 +502,19 @@ void Join(const std::string& hostArg, uint16_t port, const std::string& password
 
 void Leave() {
     SaveProfileNow();  // saved every 30 s otherwise: up to that much of the partner's progress was lost on leaving
+    // The host of a server standing on its own leaves: the world as it is now goes to the server first, for whoever
+    // hosts next (the connection's end sends what is queued before it closes). In a vehicle or on a mission the game
+    // cannot be saved: the server keeps the last snapshot.
+    if (Net().Online() && Net().IsHost() && !g_isHosting && core::IsPlayerReady()) {
+        std::vector<uint8_t> snap;
+        if (core::SaveWorldSnapshot(snap)) UploadWorld(snap, "host leaves");
+        else LOGI("The host leaves and the game cannot be saved now: the server keeps the world of %llu s ago",
+                  (unsigned long long)((NowMs() - g_lastUploadMs) / 1000));
+    }
     Net().Disconnect();
     StopServerProcess();
     g_isHosting = g_follower = g_prologueWait = g_worldNone = g_progressUpload = g_hasSpot = false;
-    g_hostWorldAsked = g_hostServerWorld = false;
+    g_hostWorldAsked = g_hostServerWorld = g_guestHostNext = g_guestHost = false;
     g_pendingWorld.clear();
     SetPhase(Phase::Idle);
     ui::TheChat().AddSystem(TR("Вы вышли из совместной игры.", "You left the co-op game."));
@@ -684,6 +701,11 @@ void Update() {
             net.Send(CH_BULK, w);
             if (!prologue) g_worldUploadPending = g_afterPrologue = true;
             LOGI(prologue ? "New game: its prologue runs, partners wait for its end" : "The prologue is over: partners join");
+        }
+        // a guest host's world goes to the server now and then: a game closed without leaving loses that much at most
+        if (g_guestHost && !g_worldUploadPending && NowMs() - g_lastUploadMs >= kGuestSnapshotMs) {
+            g_worldUploadPending = true;
+            g_keepSent = true;  // nobody waits for this one: no "send the stored world" while it cannot be saved
         }
         // a new game launches its prologue in the first frames: no snapshot before it does
         if (g_worldUploadPending && !prologue && NowMs() - g_gameStartedAt > 5000 && NowMs() - g_snapshotTriedAt > 1000) {
@@ -877,9 +899,9 @@ bool TakeHostServerWorld() { return std::exchange(g_hostServerWorld, false); }
 void OnWorldReceived(const std::vector<uint8_t>& data) {
     if (Net().IsHost()) {  // the world it asked a server standing on its own for (OnOnline); any other is not for a host
         if (!std::exchange(g_hostWorldAsked, false)) return;
-        g_hostServerWorld = true;
+        g_hostServerWorld = g_guestHostNext = true;
         LoadHostWorld(data);
-        if (g_phase != Phase::LoadingWorld) g_hostServerWorld = false;
+        if (g_phase != Phase::LoadingWorld) g_hostServerWorld = g_guestHostNext = false;
         return;
     }
     g_worldNone = false;
@@ -896,8 +918,12 @@ void OnGameStarted() {
     g_gameStartedAt = NowMs();
     g_prologue = g_afterPrologue = false;  // another world: its own story
     if (g_phase == Phase::LoadingWorld || (Net().Online() && g_phase != Phase::Playing)) SetPhase(Phase::Playing);
-    // the host's save carries the host's wanted level: the partner starts without it
-    if (Net().Online() && !Net().IsHost()) game::script::Cmd(0x0110).I(0).Run();  // CLEAR_WANTED_LEVEL
+    // the game that starts is the server's world, or one this host loaded itself afterwards (then the world is its own)
+    g_guestHost = std::exchange(g_guestHostNext, false) && Net().Online() && Net().IsHost();
+    if (g_guestHost) LOGI("Guest host: the server's world, this player's own character over it");
+    // the host's save carries the host's wanted level: the partner starts without it, and so does a guest host (the
+    // stars are the last host's)
+    if (Net().Online() && (!Net().IsHost() || g_guestHost)) game::script::Cmd(0x0110).I(0).Run();  // CLEAR_WANTED_LEVEL
     if (Net().Online() && Net().IsHost()) g_worldUploadPending = true;
 }
 

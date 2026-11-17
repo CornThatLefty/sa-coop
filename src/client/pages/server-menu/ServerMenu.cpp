@@ -47,6 +47,7 @@ std::string NameOf(const Setting& s) {
     if (k == "admins") return TR("Админы (ники через запятую)", "Admins (nicknames, comma-separated)");
     if (k == "admin_password") return TR("Пароль админа", "Admin password");
     if (k == "snapshot_minutes") return TR("Снимок мира, минут", "World snapshot, minutes");
+    if (k == "backup_minutes") return TR("Резервная копия мира, минут", "World backup, minutes");
     if (k == "dedicated") return TR("Отдельный сервер с общим миром", "Dedicated server with a shared world");
     if (k == "internet") return TR("Код приглашения через интернет", "Invite code over the internet");
     if (k == "health_base") return TR("Здоровье врагов", "Enemy health");

@@ -1,10 +1,27 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 6: the server's settings in the game (F8), player options in
-the F2 window, and a host that joins a standing server loads that server's world.
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 7: anyone can host a standing server in turn. The host plays
+the server's shared world as its own character, and the world goes back to the server for the next host.
 
-Every player and the server need this build: it does not connect to test builds 1 to 5 or to upstream 0.3.4
-(protocol 65). A Linux or panel server is updated with the same release (the egg's Reinstall).
+It plays with test build 6 (protocol 65) and does not connect to builds 1 to 5 or to upstream 0.3.4. The new
+behaviour works in the game of a player who has this build; the server needs it for `backup_minutes`.
 
-## New since test build 5
+## New since test build 6
+
+- **The host's own character on a standing server.** A player who joins an empty Linux or panel server gets the
+  host role, loads the server's world, and plays it with its own money, weapons, skills and look, saved on the
+  server as a partner's are. A first visit starts from the world's CJ as saved.
+  To check: player A joins alone, earns money, leaves with the F9 window's Leave. Player B joins alone: the world
+  is as A left it (missions, properties), and B has B's own money and weapons. A joins again later: A's money and
+  weapons are back.
+- **The world goes back to the server.** The host's game uploads the world every 5 minutes when it can be saved
+  (on foot, no mission), after every passed mission, and on leaving through F9 or `/disconnect`. A game closed
+  without leaving loses up to 5 minutes of world changes; the character is at most 30 seconds old.
+- **Backups.** `backup_minutes` (preset 30, also in F8): a replaced world becomes a backup when the last backup is
+  that old, and at every passed mission, so ten backups reach back hours and not minutes.
+
+Not in this build: the host role moving while other players are in the game. When the host leaves with partners
+still playing, the game behaves as before.
+
+## New in test build 6
 
 - **Server settings window, F8.** The server's settings on three tabs (Server, Combat, Economy): rules, player
   count, passwords, admins, every balance value. The host of a game started from F9 and a server's admins change
@@ -84,7 +101,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.6` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.7` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 

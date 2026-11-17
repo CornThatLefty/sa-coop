@@ -79,6 +79,11 @@ std::wstring OwnLookPath() {
     return dir.empty() ? std::wstring() : dir + L"coop_own_look.bin";
 }
 bool g_foreignGame = false;      // the game was started as a partner: a host's world, kept after leaving it too
+// Host of a server standing on its own, playing the world that server keeps (flow::TakeHostServerWorld): the world is
+// everyone's, and the host's character is its own as a partner's is. Its profile comes from the server and goes over
+// the world, and is saved there, by the same rules as a partner's.
+bool g_guestHost = false;
+bool ProfilePlayer() { return !Net().IsHost() || g_guestHost; }
 
 // The game the host plays: the server keeps the partners' profiles per game. A new game moved the old profiles aside,
 // and the partner who came back to an older save with the host found nothing of it (01.11). The game of each save
@@ -916,6 +921,7 @@ public:
     }
 
     void OnSessionEnd() override {
+        g_guestHost = false;
         m_hostLoad = m_loadChecked = 0;
         g_hostLoadSent = 0;
         m_profileReceived = m_applied = m_resetPending = m_reset = false;
@@ -940,7 +946,8 @@ public:
         // The host of a server standing on its own plays the world that server keeps (flow): the game is the one the
         // server names. The world's local copy is no slot: it read as game 0, the host said "game 0", and the server
         // gave every partner the profiles of game 0 instead of this game's. It is no game of this player's own either.
-        if (flow::TakeHostServerWorld()) g_gameId = Net().ServerGameId(), g_foreignGame = true;
+        g_guestHost = flow::TakeHostServerWorld();
+        if (g_guestHost) g_gameId = Net().ServerGameId(), g_foreignGame = true;
         g_newGame = false;
         g_gameStartMs = NowMs();
         if (m_resetPending && flow::InHostWorld()) m_reset = true, m_resetPending = false;  // the new game's world
@@ -988,7 +995,7 @@ public:
         // only in the host's world: a game of its own (joined from single player, waiting) or an old world during a
         // new game's prologue is no profile, it would have gone to the server as one
         bool hostWorld = flow::InHostWorld();
-        if (!Net().IsHost() && hostWorld && m_profileReceived && !m_applied && !m_resetPending) {
+        if (ProfilePlayer() && hostWorld && m_profileReceived && !m_applied && !m_resetPending) {
             m_applied = true;
             bool own = false, boughtOwn = false;
             // The host's new game: a new CJ for the partner too, in the clothes and body the game starts with. The look of
@@ -1111,7 +1118,7 @@ public:
 
         // the partner's profile goes to the server when it changed (checked every 30 s), and 3 s after a new look settled
         // (bought clothes, a haircut): the host's world, reloaded at the next mission's marker, took the purchase back (#21)
-        bool lookToSave = !Net().IsHost() && m_lookChangedMs > m_lastSaveMs && now - m_lookChangedMs >= 3000;
+        bool lookToSave = ProfilePlayer() && m_lookChangedMs > m_lastSaveMs && now - m_lookChangedMs >= 3000;
         if ((now - m_lastSaveMs >= 30000 || lookToSave) && hostWorld) SaveNow();
     }
 
@@ -1149,7 +1156,7 @@ public:
     }
 
     void SaveNow(bool always = false) {
-        if (!Net().Online() || Net().IsHost() || !m_applied || !core::IsPlayerReady() || !flow::InHostWorld()) return;
+        if (!Net().Online() || !ProfilePlayer() || !m_applied || !core::IsPlayerReady() || !flow::InHostWorld()) return;
         m_lastSaveMs = NowMs();
         std::vector<uint8_t> blob = CaptureProfile();
         if (blob == m_saved && !always) return;

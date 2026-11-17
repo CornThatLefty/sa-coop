@@ -216,7 +216,7 @@ A change is in effect at once, is written to `server.ini`, and is told to every 
 | Kind | Control | Settings |
 | --- | --- | --- |
 | On or off | Checkbox | `friendly_fire`, `partner_teleport`, `shared_life`, `partner_cheats` |
-| Number | Arrows, one step a click | `max_players`, `snapshot_minutes`, every `[balance]` multiplier and `mission_scale_radius_m` |
+| Number | Arrows, one step a click | `max_players`, `snapshot_minutes`, `backup_minutes`, every `[balance]` multiplier and `mission_scale_radius_m` |
 | Choice | Arrows | `payout_mode` |
 | Text | Text box, Enter applies | `name`, `host`, `motd`, `admins` |
 | Password | Text box, Enter applies; shown as set or none, never as text | `password`, `admin_password` |
@@ -245,10 +245,32 @@ does. With no world on the server the choice is asked as before.
   game becomes the world.
 - The host names the game to the server by the id the server's welcome carried, not by the local copy's (which read
   as game 0 and moved every partner to the profiles of game 0).
-- The host plays the world's CJ as saved. Profiles for the host (its own money, weapons and look on top of the shared
-  world) are part of the anyone-can-host work and are not built.
 
-Source: `OnOnline`, `OnWorldReceived` in `src/client/entities/session/Flow.cpp`, `features/progress`.
+**Guest host (test build 7).** Such a host is a guest in a world that is everyone's, so its character is its own, by
+the rules a partner's already follows:
+
+| | Behaviour |
+| --- | --- |
+| Character | The host's profile on the server (money, weapons, skills, look, shop purchases) goes over the loaded world. A first visit starts from the world's CJ as it was saved and is the player's own from then on |
+| Profile saving | Every 30 s when changed, 3 s after a change of look, and on leaving, as a partner's |
+| World while playing | The host's game uploads a snapshot every 5 minutes when it can be saved (on foot, no mission) and after every passed mission |
+| World on leaving | Leaving through the F9 window or `/disconnect` uploads a snapshot first, then the connection closes once the server has it (4 s at most). In a vehicle or on a mission the game cannot be saved: the server keeps the last snapshot |
+| Game closed without leaving | The server keeps the last snapshot: up to 5 minutes of world changes are lost. The profile is at most 30 s old |
+| Wanted level | Cleared on loading: the stars in the save are the last host's |
+| Next host | The next player on an empty server gets the host role, loads that world and plays it as its own character |
+
+Limits, all part of the anyone-can-host work still to do:
+
+- A host role that moves while others are in the game (the host leaves and a partner is promoted) is handled as
+  upstream handles it. No module reacts to `OnHostChanged`, and the promoted partner's game does not take over the
+  story. Sequential play (one leaves, the next joins) is what this build covers.
+- A host that brings its own save or starts a new game on an empty server is an ordinary host: the save's CJ is its
+  character, and it gets a profile from its next visit on.
+- The world's own CJ data (position, the last host's money in the save) stays in the save. A first-time player
+  starts from it.
+
+Source: `OnOnline`, `OnWorldReceived`, `Leave`, `Update` in `src/client/entities/session/Flow.cpp`; `ProfilePlayer` in
+`src/client/features/progress/Progress.cpp`.
 
 ## Server additions
 
@@ -259,7 +281,7 @@ These apply to every server, a game hosted from the F9 window included.
 | `[balance]` in `server.ini`, `balance_exclude.ini` | See above |
 | `/reloadbalance` (host, admin or console) | Re-reads both files and sends them to every player |
 | `bind =` in `[server]`, `--bind <address>` | Address to listen on; empty listens on every address |
-| World backups | The world a new upload replaces is kept: `world\world.b.1` (latest) to `world.b.10` |
+| World backups | The world a new upload replaces is kept: `world\world.b.1` (latest) to `world.b.10`. Since test build 7 not every upload makes one: the first replaced world after a server start, every upload after a passed mission, and otherwise one when the last backup is `backup_minutes` old (preset 30; 0: every replaced world). Snapshots come every few minutes, and a backup each left ten backups less than an hour deep |
 | `/restoreworld [number]` (admin) | Without a number lists the backups; with one, makes that backup the world and sends it to the players in the game. The world it replaces becomes backup 1 |
 | Game id kept over a restart | `world\game.id` holds the id of the stored world's game, so partners get that game's profiles from their first join after a restart |
 | World waiters | A partner waiting for the world is answered when the host leaves or changes: the new host's game is asked, or the stored world is sent. A repeated request is answered each time |
