@@ -12,6 +12,7 @@ All players and the server must run the same fork build: the protocol version di
 - [Combat scaling](#combat-scaling)
 - [Shop prices](#shop-prices)
 - [Payouts](#payouts)
+- [Name tags switch](#name-tags-switch)
 - [Server additions](#server-additions)
 - [Tests without the game](#tests-without-the-game)
 - [Engine addresses added by the fork](#engine-addresses-added-by-the-fork)
@@ -184,6 +185,17 @@ mode the late joiner still receives everything earned since the job began, as up
 
 Unchanged: gifts between players (F2), pool stakes, contest winnings, and non-money completion rewards of side jobs
 (max health, armour, fireproof and the like), which every player still receives.
+
+## Name tags switch
+
+The names, health and armour bars over the other players could be turned off only by `name_tags = 0` in `[game]` of
+`coop\coop.ini`, read at the game's start. Test build 4 adds two switches that act at once and write the same key:
+
+- the `Name tags over players` checkbox of the F9 window, shown while connected, beside the mark colour;
+- `/names` in the chat (turns them over), `/names on`, `/names off`.
+
+The setting is each player's own: it changes what that player's game draws and is not sent to anyone. Source:
+`Players::SetNameTags` in `src/client/entities/player`.
 
 ## Server additions
 

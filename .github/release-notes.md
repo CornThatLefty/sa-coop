@@ -1,8 +1,16 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 3: co-op balance (combat scaling, shop prices, split payouts),
-a crash fix, and picked-up cash kept out of shared rewards.
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 4: co-op balance (combat scaling, shop prices, split payouts),
+a crash fix, picked-up cash kept out of shared rewards, and a switch for the name tags over players.
 
-It does not connect to upstream 0.3.4 (protocol 64). It plays with test builds 1 and 2, but each fix works only in the
+It does not connect to upstream 0.3.4 (protocol 64). It plays with test builds 1 to 3, but each fix works only in the
 game of a player who has this build, so every player should install it.
+
+## New since test build 3
+
+- **Name tags switch.** The names, health and armour bars over the other players turn off and on in the game: the
+  `Name tags over players` checkbox of the F9 window (shown while connected), or `/names`, `/names on`, `/names off`
+  in the chat. The setting is each player's own and is kept in `coop\coop.ini` (`name_tags`).
+  To check: `/names` hides the tags at once in that player's game alone; the F9 checkbox shows the same state; the
+  setting holds after a restart of the game.
 
 ## Fixed since test build 2
 
@@ -39,7 +47,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.3` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.4` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 

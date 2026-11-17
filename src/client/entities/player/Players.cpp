@@ -2801,7 +2801,28 @@ void Players::SetMarkColour(const std::string& colour) {
     m_markSentMs = 0;  // goes out on the next frame
 }
 
+void Players::SetNameTags(bool on) {
+    Cfg().nameTags = on;
+    Ini ini;
+    ini.Load(Cfg().iniPath);
+    ini.Set("game", "name_tags", on ? "1" : "0");
+    ini.Save(Cfg().iniPath);
+}
+
 bool Players::OnCommand(const std::string& cmd, const std::vector<std::string>& args) {
+    // the names over the other players, on or off without leaving the game for coop.ini (name_tags was a line of the
+    // file alone): /names turns them over, /names on and /names off set them
+    if (cmd == "names") {
+        std::string arg = args.empty() ? "" : ToLower(args[0]);
+        if (!arg.empty() && arg != "on" && arg != "off") {
+            ui::TheChat().AddError(TR("/names: on или off.", "/names: on or off."));
+            return true;
+        }
+        SetNameTags(arg.empty() ? !Cfg().nameTags : arg == "on");
+        ui::TheChat().AddSystem(Cfg().nameTags ? TR("Подписи над игроками: включены.", "Name tags over players: on.")
+                                               : TR("Подписи над игроками: выключены.", "Name tags over players: off."));
+        return true;
+    }
     // our own mark on the other player's radar in a colour of our choice (the allies' blue was taken for a gang member's)
     if (cmd == "blip") {
         std::string colour = args.empty() ? "" : ToLower(args[0]);
