@@ -210,6 +210,69 @@ int SideHere(CEntity* hitter, int weapon, int dir) {
 using GenerateDamageFn = bool(__cdecl*)(CPed*, CEntity*, int, int, int, int);
 GenerateDamageFn g_origGenerateDamage = nullptr;
 
+// ---- Instant hits (the server's sync_instant_hits; docs/FORK.md, "Ownership") ----
+// Our player's hit on another game's person is still that game's to decide, and it answers a ping later: until then
+// the copy here showed nothing (a shot, a punch) or fell and could not die (a car). Now the hit is applied to the copy
+// too, at once, for what is seen:
+//  * any copy on foot takes the game's own reaction to the hit, its health put back after it;
+//  * a passer-by (no script's person, X_SCRIPT) also dies here when the hit kills it by a margin: the health its owner
+//    last sent, less the least damage its owner can count (the balance rounds at random). Its owner's game confirms
+//    with its own death; if it lives on there after all, the copy is made again (Peds::ApplyMirror, predictedMs).
+// The owner's game stays the judge of health, of the kill's credit (KILLED_BY_YOU) and of the wanted level's charge
+// sent with the hit (ChargeCrime): the hit applied here changes none of them (KeepWanted, HookRegisterKill).
+constexpr float kShotMargin = 3.0f, kCarMargin = 10.0f;  // health a hit must exceed the copy's by, to kill here
+
+bool InstantHits() { return balance::Settings().On(proto::BK_SYNC_INSTANT_HITS); }
+
+bool MayDieHere(const NetPed& np, CPed* ped) {
+    // 250: the health travels in a byte, and a person with more than it holds reads as 255
+    return np.hasState && !(np.state.extra & PedSyncState::X_SCRIPT) && np.state.health < 250 && !ped->InVehicle() &&
+           !(np.state.flags & PedSyncState::F_IN_VEHICLE);
+}
+
+// before a hit that may kill the copy: its loot falls here, as when its owner's word of its death comes (ApplyMirror)
+void LootHere(const NetPed& np, CPed* ped, bool on) {
+    int h = GetPedRef(ped);
+    Cmd(0x087E).I(h).I(on ? 1 : 0).Run();  // SET_CHAR_DROPS_WEAPONS_WHEN_DEAD
+    bool payless = np.pedType == PED_TYPE_COP || np.pedType == PED_TYPE_MEDIC || np.pedType == PED_TYPE_FIREMAN;
+    if (on) Cmd(0x03FE).I(h).I(payless ? 0 : ped->Money()).Run();  // SET_CHAR_MONEY: a script ped drops only what a script gave
+}
+
+void DiedHere(NetPed& np, const char* how) {
+    np.deadApplied = true;
+    np.predictedMs = np.corpseMs = NowMs();
+    np.aliveSinceMs = 0;
+    LOGI("Mirror %04X of player %d dies here of our %s, ahead of its owner's word", np.netId, np.owner, how);
+}
+
+// our player's shot, blow or blast on a copy, as the game itself applies it. Returns what the game says of the hit.
+bool HitCopyHere(NetPed& np, CPed* ped, CEntity* by, int weapon, int damage, int piece, int dir) {
+    if (!InstantHits() || ped->InVehicle() || !np.hasState) return true;  // as before: it counts, and shows when its owner answers
+    bool mayDie = MayDieHere(np, ped);
+    int h = GetPedRef(ped);
+    float health = ped->Health(), armour = ped->Armour();
+    // the least its owner can make of it: divided by the health multiplier of people on the streets, rounded down
+    float scale = std::max(1.0f, balance::Scale(balance::Stat::Health, false));
+    int least = std::max(1, (int)std::floor((float)damage / scale));
+    Cmd(0x02AB).I(h).I(0).I(0).I(0).I(0).I(0).Run();  // SET_CHAR_PROOFS off for this hit
+    if (mayDie) LootHere(np, ped, true);
+    ped->Health() = mayDie ? health + kShotMargin : 1000.0f;
+    bool counts;
+    {
+        KeepWanted keep;
+        counts = g_origGenerateDamage(ped, by, weapon, mayDie ? least : damage, piece, dir);
+    }
+    if (mayDie && ped->Health() <= 0.0f) {
+        DiedHere(np, "hit");
+        return counts;
+    }
+    ped->Health() = health;
+    ped->Armour() = armour;
+    if (mayDie) LootHere(np, ped, false);
+    Cmd(0x02AB).I(h).I(1).I(1).I(1).I(1).I(1).Run();  // SET_CHAR_PROOFS: all again, its owner decides the harm
+    return counts;
+}
+
 // CWeapon::GenerateDamageEvent(victim, creator, weapon, damage, bodyPart, direction): every ped damage
 // (bullets, melee, explosions, fire, vehicle hits) goes through it. It tells whether the hit counts (blood, a fight
 // hit): one decided in the other game still does here.
@@ -260,6 +323,7 @@ bool __cdecl HookGenerateDamageEvent(CPed* victim, CEntity* creator, int weapon,
                 np->hitWeapon = (uint8_t)weapon, np->hitPiece = (uint8_t)piece, np->hitDir = (uint8_t)dir;
                 ChargeCrime(victim, np->pedType, weapon);
                 LOGI("Hit ped %04X of player %d: weapon %d, damage %d", np->netId, np->owner, weapon, damage);
+                return HitCopyHere(*np, victim, creator, weapon, damage, piece, dir);
             } else if (!IsCollision(weapon) && creator && creator->IsPed() && !((CPed*)creator)->IsPlayer() && !np->deadApplied) {
                 // one of our people hit it (a gang fight between the two games' people): its owner applies it, from its copy
                 // of ours (copies have every proof, and our gangs' fists and bullets hurt nobody over there)
@@ -321,15 +385,26 @@ void __fastcall HookKillPedWithCar(CPed* ped, void* edx, CVehicle* car, float im
                 // stopped against it, and it fell only when its owner's state came (27.10). The hit is the
                 // game's own (its collision proof off for it), its harm stays the owner's: health high for the hit,
                 // then back, no crime of it here (KeepWanted)
+                // Instant hits: a passer-by our player's car kills by a margin dies here too (see HitCopyHere).
                 int h = GetPedRef(ped);
                 float health = ped->Health();
+                bool mayDie = byUs && InstantHits() && MayDieHere(*np, ped);
                 Cmd(0x02AB).I(h).I(1).I(1).I(1).I(0).I(1).Run();  // SET_CHAR_PROOFS: collision off
-                ped->Health() = 1000.0f;
+                if (mayDie) LootHere(*np, ped, true);
+                ped->Health() = mayDie ? health + kCarMargin : 1000.0f;
                 {
                     KeepWanted keep;
+                    np->dying = mayDie;  // if the game counts the car's harm through GenerateDamageEvent, it passes
                     g_origKillWithCar(ped, edx, car, impulse, flag);
+                    np->dying = false;
+                }
+                if (mayDie && ped->Health() <= 0.0f) {
+                    DiedHere(*np, "car");
+                    Cmd(0x02AB).I(h).I(0).I(0).I(0).I(0).I(0).Run();  // a body: no proofs, as any dead copy
+                    return;
                 }
                 ped->Health() = health;
+                if (mayDie) LootHere(*np, ped, false);
                 Cmd(0x02AB).I(h).I(1).I(1).I(1).I(1).I(1).Run();  // SET_CHAR_PROOFS: all again
             }
             return;
@@ -447,8 +522,13 @@ RegisterKillFn g_origRegisterKill = nullptr;
 
 // CEventHandler::RegisterKill(ped, killer, weapon, headshot): a ped died of a hit. This game's ped killed by the other
 // player is credited to that player's game and counts here as killed by somebody else (see the top of the file).
+bool g_ownersCredit = false;  // the kill being registered is one its owner's game credited to us (KILLED_BY_YOU)
 void __cdecl HookRegisterKill(CPed* ped, CEntity* killer, int weapon, bool headshot) {
     CPlayerPed* me = FindPlayerPed(0);
+    // A copy killed here by our player's own hit (instant hits): its owner's game credits the kill once it has died
+    // there too (KILLED_BY_YOU, with the type its owner has). Counted here as well it was two kills.
+    if (Net().Online() && ped && killer == me && !g_ownersCredit)
+        if (NetPed* np = Peds::Instance().Find(ped); np && np->owner != Net().MyId()) killer = nullptr;
     if (Net().Online() && ped && killer && killer->IsPed() && core::IsPlayerReady()) {
         if (RemotePlayer* rp = Players::Instance().FindByPed((CPed*)killer)) {
             if (NetPed* np = Peds::Instance().Find(ped); np && np->owner == Net().MyId())
@@ -553,7 +633,9 @@ void HandleDamage(uint8_t from, Reader& r) {
             NetPed* np = Peds::Instance().Find(ped);
             int32_t type = ped->PedType();
             if (np) ped->PedType() = np->pedType;
+            g_ownersCredit = true;
             HookRegisterKill(ped, FindPlayerPed(0), weapon, piece != 0);
+            g_ownersCredit = false;
             ped->PedType() = type;
         }
         LOGI("We killed ped %04X of player %d: weapon %d", netId, from, weapon);

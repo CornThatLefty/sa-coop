@@ -69,6 +69,8 @@ std::string NameOf(const Setting& s) {
     if (k == "price_carmods") return TR("Цена тюнинга", "Car mod price");
     if (k == "payout_mode") return TR("Раздел наград", "Reward sharing");
     if (k == "payout_share") return TR("Доля при scaled", "Share in scaled mode");
+    if (k == "sync_driver_leads") return TR("Прохожих и трафик создаёт игра водителя", "Driver's game spawns people and traffic");
+    if (k == "sync_instant_hits") return TR("Попадания по чужим людям видны сразу", "Hits on other games' people show at once");
     return k;
 }
 

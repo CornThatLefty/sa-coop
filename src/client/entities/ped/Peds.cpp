@@ -348,6 +348,12 @@ bool Revived(NetPed& np, const PedSyncState& st, uint64_t now) {
         np.aliveSinceMs = 0;
         return false;
     }
+    // killed here by our player's hit ahead of its owner's game: that game applies the hit a ping later, and its states
+    // from before say "alive" until then
+    if (np.predictedMs && now - np.predictedMs < 1500) {
+        np.aliveSinceMs = 0;
+        return false;
+    }
     if (!np.aliveSinceMs) np.aliveSinceMs = now;
     return now - np.aliveSinceMs >= 500;
 }
@@ -477,6 +483,7 @@ PedSyncState Peds::Capture(NetPed& np) {
               (ped->PedFlags() & (1u << 29) ? PedSyncState::F_NO_DRAG : 0);  // CPed::bDontDragMeOutCar
     s.walkGroup = (uint8_t)std::clamp(Field<int32_t>(ped, 0x4D4), 0, 0xFE);  // CPed::m_nAnimGroup
     s.extra = ped->PedFlags3() & (1u << 12) ? PedSyncState::X_WAVE : 0;  // CPed::bPartOfAttackWave
+    if (ped->CreatedBy() != 1) s.extra |= PedSyncState::X_SCRIPT;  // not PED_GAME
 
     // guns: shots show up as the clip emptying (the gun task fires on its own schedule), on foot and out of a car
     CWeapon& w = ped->ActiveWeapon();
@@ -1099,6 +1106,7 @@ void Peds::ApplyMirror(NetPed& np) {
             if (!Revived(np, st, now)) return;  // a body the game took away: made again, it stood up and died once more
             np.deadApplied = false;             // revived in its owner's game: it is made again as any copy
             np.aliveSinceMs = 0;
+            np.predictedMs = 0;
             LOGI("Mirror %04X is alive again in its owner's game: its copy is made again", np.netId);
         }
         if (now - np.lastTaskMs >= 100) {
@@ -1163,7 +1171,7 @@ void Peds::ApplyMirror(NetPed& np) {
             }
             if (ped->Health() > 0.0f) Cmd(0x05BE).I(np.handle).Run();  // TASK_DIE: killed by someone else
             np.corpseMs = now;
-        } else if (!ped->InVehicle() && now - np.corpseMs > 500 &&
+        } else if (!np.predictedMs && !ped->InVehicle() && now - np.corpseMs > 500 &&
                    (st.vel.Length() > 2.0f || (ped->GetPosition() - st.pos).Length() > 1.5f)) {
             // Its body goes where its owner's does: one thrown far after its death (a "super punch" mod flings it 20 m,
             // a blast) still lay where the copy fell (issue #22). It flies along at its owner's speed between states.
@@ -1181,8 +1189,10 @@ void Peds::ApplyMirror(NetPed& np) {
         m_byPtr.erase(ped);
         np.ped = nullptr;
         np.handle = -1;
+        if (np.predictedMs) LOGI("Mirror %04X was killed here by our hit, and lives on in its owner's game", np.netId);
         np.deadApplied = np.dying = np.animFull = false;
         np.aliveSinceMs = 0;
+        np.predictedMs = 0;
         np.animBlock = np.baseBlock = kNoAnim;
         np.gunMode = 0;
         np.lastTaskMs = 0;

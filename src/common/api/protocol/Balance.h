@@ -31,6 +31,10 @@ enum BalanceKey : uint8_t {
     BK_PRICE_CARMODS,
     BK_PAYOUT_MODE,   // PayoutMode
     BK_PAYOUT_SHARE,  // PAYOUT_SCALED: each recipient's part of what was earned
+    // Two switches of how the games share the world (0 or 1), sent with the balance so that every game follows the
+    // same rule (docs/FORK.md, "Ownership")
+    BK_SYNC_DRIVER_LEADS,  // in a car two players share, the driver's game makes the people and traffic around it
+    BK_SYNC_INSTANT_HITS,  // a player's hit on another game's person shows in its own game at once
     BK_COUNT
 };
 
@@ -64,7 +68,12 @@ inline constexpr BalanceKeyInfo kBalanceKeys[BK_COUNT] = {
     {"price_carmods", 1.0f, 1.5f, 0.01f, 1000.0f},
     {"payout_mode", (float)PAYOUT_FULL, (float)PAYOUT_SPLIT, 0.0f, 2.0f},
     {"payout_share", 1.0f, 0.5f, 0.0f, 1.0f},
+    {"sync_driver_leads", 0.0f, 1.0f, 0.0f, 1.0f},
+    {"sync_instant_hits", 0.0f, 1.0f, 0.0f, 1.0f},
 };
+
+// a key that is a switch: 0 or 1 in server.ini, a checkbox in the F8 window
+inline bool BalanceKeyIsFlag(int key) { return key == BK_SYNC_DRIVER_LEADS || key == BK_SYNC_INSTANT_HITS; }
 
 inline int BalanceKeyByName(const std::string& lowerName) {
     for (int i = 0; i < BK_COUNT; ++i)
@@ -100,6 +109,7 @@ struct Balance {
         return b;
     }
     float Get(BalanceKey k) const { return v[k]; }
+    bool On(BalanceKey k) const { return v[k] >= 0.5f; }
     PayoutMode Payout() const { return (PayoutMode)(int)(v[BK_PAYOUT_MODE] + 0.5f); }
     bool Neutral() const {
         for (int i = 0; i < BK_COUNT; ++i)

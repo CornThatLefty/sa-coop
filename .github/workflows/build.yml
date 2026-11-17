@@ -103,6 +103,30 @@ jobs:
           ldd dist/coop-server-linux-x86_64/coop-server
           objdump -T dist/coop-server-linux-x86_64/coop-server | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1
 
+      # A hosting panel (Pelican, Pterodactyl) runs the server in this image and stops it by typing quit into its
+      # console, which stays open. The server once logged its stop and never ended there (docs/FORK.md, "Linux server").
+      - name: The server stops in a panel's image
+        run: |
+          IMG=ghcr.io/pelican-eggs/yolks:debian
+          docker pull -q $IMG
+          rm -rf /tmp/pel && mkdir -p /tmp/pel && cp -r dist/coop-server-linux-x86_64/. /tmp/pel/ && chmod -R a+rwX /tmp/pel
+          mkfifo /tmp/console
+          sleep 600 > /tmp/console &   # the console stays open after the command, as a panel's does
+          docker run --rm -i --name coop -v /tmp/pel:/home/container -e STARTUP='./coop-server --port 7788' -e SERVER_PORT=7788 $IMG < /tmp/console > /tmp/out.txt 2>&1 &
+          for i in $(seq 1 30); do grep -q "Server ready" /tmp/out.txt && break; sleep 1; done
+          grep "Server ready" /tmp/out.txt
+          echo quit > /tmp/console
+          stopped=0
+          for i in $(seq 1 15); do
+            sleep 1
+            if [ "$(docker inspect -f '{{.State.Running}}' coop 2>/dev/null)" != "true" ]; then stopped=$i; break; fi
+          done
+          tail -n 4 /tmp/out.txt
+          docker exec coop sh -c 'for t in /proc/[0-9]*/task/*; do echo "$t $(cat $t/comm) $(grep State $t/status)"; done' 2>/dev/null || true
+          docker rm -f coop > /dev/null 2>&1 || true
+          if [ "$stopped" = 0 ]; then echo "The server did not end within 15 s of quit"; exit 1; fi
+          echo "The server ended $stopped s after quit"
+
       - uses: actions/upload-artifact@v4
         with:
           name: coop-server-linux-x86_64

@@ -11,6 +11,8 @@
 #include <windows.h>
 #include <mmsystem.h>
 #else
+#include <unistd.h>
+
 #include <csignal>
 #endif
 
@@ -262,17 +264,32 @@ static int ServerMain(int argc, wchar_t** argv) {
             if (!line.empty()) g_server.QueueConsoleCommand(WideToUtf8(line));
         }
 #else
-        // a terminal's lines; as a service the input is closed and this thread ends at once
+        // A terminal's or a hosting panel's lines; as a service the input is closed and this thread ends at once. Read
+        // with read(), not through std::cin: a thread waiting in the C library's stdin holds that stream's lock, and the
+        // process's exit waits for every stream's lock (glibc 2.41, Debian 13). A panel's server logged its stop and
+        // never ended, its console still open (17.11).
         std::string line;
-        while (std::getline(std::cin, line)) {
-            while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
-            if (!line.empty()) g_server.QueueConsoleCommand(line);
-        }
+        char buf[512];
+        for (ssize_t n; (n = read(STDIN_FILENO, buf, sizeof buf)) > 0;)
+            for (ssize_t i = 0; i < n; ++i) {
+                if (buf[i] != '\n' && buf[i] != '\r') {
+                    if (line.size() < 1024) line += buf[i];
+                    continue;
+                }
+                if (!line.empty()) g_server.QueueConsoleCommand(line);
+                line.clear();
+            }
 #endif
     });
     input.detach();
 
     g_server.Run();
+#ifndef _WIN32
+    // The server has stopped in order (Run) and the log is on the disk line by line. The process ends here, past the
+    // C library's own exit: nothing of it is needed any more, and it must not wait for the console thread above.
+    fflush(stdout);
+    _exit(0);
+#endif
     return 0;
 }
 

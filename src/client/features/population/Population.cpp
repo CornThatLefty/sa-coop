@@ -50,12 +50,42 @@ int LocalWantedLevel() {
     return wanted ? Field<int32_t>(wanted, 0x2C) : 0;
 }
 
+// A car two players share: the player whose game leads its population because it drives (ours: our own id), 0xFF with
+// no such car. The people and traffic a driver meets were the host's whenever the host rode along: everything the
+// driver ran into was a copy, answering a hit a ping later. The driver is the one who meets them: its game makes them.
+uint8_t SharedCarDriver() {
+    CPlayerPed* me = FindPlayerPed(0);
+    CVehicle* v = me && me->InVehicle() ? me->Vehicle() : nullptr;
+    NetVehicle* nv = v ? Vehicles::Instance().Find(v) : nullptr;
+    if (!nv) return 0xFF;
+    bool driving = v->Driver() == me;
+    for (auto& [id, rp] : Players::Instance().All()) {
+        if (!rp.hasState || rp.vehNetId != nv->netId) continue;
+        if (driving && rp.mode == RemotePlayer::Mode::Passenger) return Net().MyId();
+        if (!driving && rp.mode == RemotePlayer::Mode::Driver) return id;
+    }
+    return 0xFF;
+}
+
 void UpdateSuppression() {
     bool want = false, covered = false;
     // whose people and cars cover two players together: the host's, and while a joint side activity runs, its leader's.
     // A taxi job's fares, a pimp's clients and a vigilante's targets are the leading game's own people and cars: led by
     // the partner near the host, the job had none (#2)
     uint8_t source = SideLeading() ? Net().MyId() : SideLeader() != 0xFF ? SideLeader() : Net().HostId();
+    // ...and in a car two players share, its driver's (the server's sync_driver_leads). Not during the host's story
+    // mission: its streets are its script's (densities, the people and cars it places).
+    static uint8_t carLead = 0xFF;
+    uint8_t car = 0xFF;
+    if (Net().Online() && core::IsPlayerReady() && source == Net().HostId() && Net().Balance().On(proto::BK_SYNC_DRIVER_LEADS) &&
+        !(Net().IsHost() ? core::IsOnMission() : HostMissionRecent(0)))
+        car = SharedCarDriver();
+    if (car != carLead) {
+        if (car != 0xFF) LOGI("A car shared with another player: player %d drives, its game makes the people and traffic", car);
+        else LOGI("No shared car any more: the people and traffic are led as before");
+        carLead = car;
+    }
+    if (car != 0xFF) source = car;
     if (Net().Online() && source != Net().MyId() && core::IsPlayerReady()) {
         CPlayerPed* me = FindPlayerPed(0);
         float limit = g_suppress || g_covered ? kShareRadiusOff : kShareRadius;
@@ -73,7 +103,7 @@ void UpdateSuppression() {
         covered = covers(host);
         // two partners together away from the host: the people of the first of them, or the street had both games' at once
         for (auto& [id, rp] : Players::Instance().All()) {
-            if (covered || source != Net().HostId() || id == source || id > Net().MyId() || !covers(&rp)) continue;
+            if (covered || car != 0xFF || source != Net().HostId() || id == source || id > Net().MyId() || !covers(&rp)) continue;
             bool byHost = host && host->hasState && host->state.area == rp.state.area && (host->state.pos - rp.state.pos).Length2D() < limit;
             if (!byHost) covered = true, source = id;  // that one makes its own
         }

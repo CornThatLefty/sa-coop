@@ -31,6 +31,7 @@ struct PedSyncState {
     uint8_t extra = 0;         // X_*
     enum : uint8_t {
         X_WAVE = 1,  // a gang war's attacker (CPed::bPartOfAttackWave): on the radar
+        X_SCRIPT = 2,  // a script made it (a mission's person, not a passer-by): its death is never guessed in another game
     };
 
     enum : uint8_t {
@@ -77,6 +78,9 @@ struct NetPed {
     uint64_t askedMs = 0;    // we asked its owner for it (a Grove member to recruit, a hooker by our car)
     uint8_t hitWeapon = 0, hitPiece = 0, hitDir = 0;  // that hit: it dies of the same one here
     bool dying = false;                               // its death goes through the game's damage (Damage lets it pass)
+    // mirror: our player's hit killed it here before its owner's game said so (features/damage, "instant hits"): since
+    // then. Its body stays where it fell here, and its owner's word that it lives is believed only after 1.5 s.
+    uint64_t predictedMs = 0;
     uint64_t lastRamMs = 0;  // our player's car hit it (sent once per contact)
     uint8_t gunMode = 0;  // 0 none, 1 aiming, 2 shooting
     int gunTargetHandle = -1;  // ped aimed at, -1: gunTarget point
