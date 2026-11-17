@@ -59,7 +59,7 @@ void Take(const Incoming& in) {
         ui::TheChat().AddSystem(Format(TR("%s передаёт вам $%d.", "%s gives you $%d."), Net().PeerName(in.from).c_str(), in.amount));
         LOGI("Money from player %d: $%d", in.from, in.amount);
     }
-    if (!Net().IsHost()) SaveProfileNow();  // a world reload puts the profile's money back
+    SaveProfileNow();  // a world reload puts the profile's money back (a host of its own game has no profile: no-op)
 }
 
 void Handle(uint8_t from, Reader& r) {
@@ -146,7 +146,7 @@ bool Give(uint8_t to, int32_t amount, std::string& error) {
         Send(OP_GIVE, to, amount);
         ui::TheChat().AddSystem(Format(TR("Вы передали $%d игроку %s.", "You gave $%d to %s."), amount, Net().PeerName(to).c_str()));
         LOGI("Money to player %d: $%d", to, amount);
-        if (!Net().IsHost()) SaveProfileNow();
+        SaveProfileNow();
         return true;
     }
     return false;

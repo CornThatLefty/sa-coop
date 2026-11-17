@@ -822,12 +822,15 @@ std::wstring Server::ProfilePath(const std::string& name) const {
 }
 
 void Server::SendProfile(Player& p) {
+    WaitProfileWrites();  // one queued a moment ago (the player left and is back) is on the disk first
     std::vector<uint8_t> data;
     ReadFileBytes(ProfilePath(p.name), data);
     Writer w(S_PROFILE);
     w.Bytes(data.data(), data.size());
     w.U32(m_gameId);
     net::Send(p.peer, CH_RELIABLE, w);
+    if (data.empty()) LOGI("No profile of %s in game %08X: a first visit", p.name.c_str(), m_gameId);
+    else LOGI("Profile sent to %s (%u bytes, game %08X)", p.name.c_str(), (unsigned)data.size(), m_gameId);
 }
 
 void Server::LoadBalanceFiles() {

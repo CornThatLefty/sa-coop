@@ -1,10 +1,34 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 12: a promoted host keeps its character, a player's copy
-gets into a car with its owner, and the logs carry the game's memory.
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 13: the server's profile is the character in every role,
+saved every 5 s.
 
-It connects to test builds 6 to 11 (protocol 65) and not to builds 1 to 5 or to upstream 0.3.4. Both fixes need
-build 12 in every player's game. The server is unchanged.
+It connects to test builds 6 to 12 (protocol 65) and not to builds 1 to 5 or to upstream 0.3.4. The profile fixes
+need build 13 in every player's game. The server's change is small (a read after a write, two log lines).
 
-## Fixed since test build 11
+## Fixed since test build 12
+
+- **Weapons came and went with the role.** A partner's PC keeps the weapons carried at the host's last save and
+  puts them back when the host loads a game. On a standing server every host that joined counted as such a load:
+  a player with no weapons after a death got an older set back at its next visit as a partner, and kept none as
+  host. A host playing the server's world names no load now. Under a host that plays a save of its own (a game
+  hosted from the F9 window) nothing changes.
+- **Look replaced by the PC's own.** A profile whose clothes were never changed on the server gave way, at a later
+  visit, to the CJ kept on the PC from a single-player game. That look goes on at a first visit only.
+- **Profile frozen after a host joined from a game of its own.** Such a host named its own game to the server
+  before the server's world loaded; partners were moved to that game's profiles and back, stopped saving, and their
+  next world load brought an older profile. The game is named once the server's world runs.
+- **Up to 30 s lost when a game closed without leaving.** The profile goes to the server every 5 s when changed.
+  Money and weapons given between players are saved at once for a host of the server's world too.
+- **Weapon icon and wanted stars with the name tags off.** `Name tags over players` in the F2 window hides them
+  with the names and bars.
+
+Unchanged: a death or an arrest takes the weapons, as the game does in single player. The profile then holds none.
+
+To check: buy clothes and a weapon, close the game with ALT+F4 after 10 s, join again: both are there. Die as
+host, join again as a partner: no weapons, and no `The host loaded a game` line in the chat.
+For a report: `coop.log` of the game and `server-data/server.log` of the server (`Profile look`, `Profile weapons`,
+`Profile sent to`).
+
+## Fixed in test build 12
 
 - **Character lost after taking over as host.** On a standing server, the host left and a partner got the role.
   From then on that partner's money, weapons, skills and clothes were no longer saved, and its next visit brought
@@ -16,7 +40,7 @@ build 12 in every player's game. The server is unchanged.
   more. The copy now waits in the seat while its owner gets in.
   To check: one player jacks a car with a driver while the other watches.
 
-## New since test build 11
+## New in test build 12
 
 - **Memory in the logs.** `coop.log` has `Memory: N of N MB of address space free` at each game's start and as the
   number moves, and names a `gta_sa.exe` limited to 2 GB. Under 150 MB free the chat says so once. Every record of
@@ -188,7 +212,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.12` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.13` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 

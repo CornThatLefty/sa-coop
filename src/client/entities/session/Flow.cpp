@@ -503,7 +503,7 @@ void Join(const std::string& hostArg, uint16_t port, const std::string& password
 }
 
 void Leave() {
-    SaveProfileNow();  // saved every 30 s otherwise: up to that much of the partner's progress was lost on leaving
+    SaveProfileNow();  // saved every few seconds otherwise: up to that much of the player's progress was lost on leaving
     // The host of a server standing on its own leaves: the world as it is now goes to the server first, for whoever
     // hosts next (the connection's end sends what is queued before it closes). In a vehicle or on a mission the game
     // cannot be saved: the server keeps the last snapshot.

@@ -65,7 +65,7 @@ void GiveUs(int type, int ammo) {
     Cmd(0x0781).I(type).Out(&model).Run();  // GET_WEAPONTYPE_MODEL
     if (model > 0) LoadModelNow(model);
     Cmd(0x01B2).I(GetPedRef(FindPlayerPed(0))).I(type).I(std::clamp(ammo, 1, kMaxAmmo)).Run();  // GIVE_WEAPON_TO_CHAR
-    if (!Net().IsHost()) SaveProfileNow();  // a world reload puts the profile's weapons back
+    SaveProfileNow();  // a world reload puts the profile's weapons back
 }
 
 std::string WithAmmo(int type, int ammo, bool whole) {
@@ -239,7 +239,7 @@ bool Give(uint8_t to, int type, int ammo, std::string& error) {
             ui::TheChat().AddSystem(Format(TR("Вы передали %s игроку %s.", "You gave %s to %s."), WithAmmo(type, ammo, whole).c_str(),
                                            Net().PeerName(to).c_str()));
             LOGI("Weapon %d x%d to player %d", type, ammo, to);
-            if (!Net().IsHost()) SaveProfileNow();
+            SaveProfileNow();
             return true;
         }
     }

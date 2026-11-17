@@ -60,7 +60,7 @@ void SendStake(uint8_t to, int32_t stake) {
 void Settle(int32_t stake, bool won) {
     if (stake <= 0) return;
     Money() += won ? stake : -stake;
-    if (!Net().IsHost()) SaveProfileNow();  // a world reload puts the profile's money back
+    SaveProfileNow();  // a world reload puts the profile's money back
     ui::TheChat().AddSystem(Format(won ? TR("Выигрыш: $%d.", "You win $%d.") : TR("Проигрыш: $%d.", "You lose $%d."), stake));
     LOGI("Pool for two: %s $%d", won ? "won" : "lost", stake);
 }

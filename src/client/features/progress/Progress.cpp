@@ -65,6 +65,17 @@ constexpr size_t kClothesSize = sizeof(CPedClothesDesc);
 
 void RebuildPlayer(CPlayerPed* ped, bool keepDescFatMuscle) { Call<0x5A82C0>(ped, keepDescFatMuscle); }  // CClothes::RebuildPlayer
 
+// The clothes' 28 keys in one number, for the log: a look that differs between a save and the next visit shows there
+uint32_t LookSum(const void* desc) {
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < 28 * sizeof(uint32_t); ++i) h = (h ^ ((const uint8_t*)desc)[i]) * 16777619u;
+    return h;
+}
+
+// The profile goes to the server when it changed, checked this often: what a game closed without leaving (a crash, a
+// freeze, ALT+F4) loses. It was 30 s.
+constexpr uint64_t kSaveEveryMs = 5000;
+
 // The partner's look in the host's world is its own, or one it was given (the host's CJ the world came with, on a
 // first visit with no CJ of its own to bring, or in a profile older than version 3): that one gives way to its own CJ
 // once there is one, unless the partner changed its clothes meanwhile.
@@ -698,18 +709,20 @@ std::vector<uint8_t> CaptureProfile() {
     memcpy(clothes, me->ClothesDesc(), kClothesSize);
     MissionClothesUnder(clothes);  // a mask the host's mission put on is not the player's own
     w.Bytes(clothes, kClothesSize);
+    static uint32_t lastLook = 0;
+    if (uint32_t look = LookSum(clothes); look != lastLook) LOGI("Profile look: %08X", look), lastLook = look;
     w.U8(NUM_WEAPON_SLOTS);
-    std::string guns;
+    std::string guns, types;
     for (int i = 0; i < NUM_WEAPON_SLOTS; ++i) {
         int type = me->Weapons()[i].type, ammo = me->Weapons()[i].ammoTotal;
         MissionWeaponUnder(type, ammo);  // a gun the host's mission gave is not the player's own
         w.U8((uint8_t)type);
         w.I32(ammo);
-        if (type > 0) guns += " " + std::to_string(type) + "x" + std::to_string(ammo);
+        if (type > 0) guns += " " + std::to_string(type) + "x" + std::to_string(ammo), types += " " + std::to_string(type);
     }
-    // a partner left with no weapons after a load (29.10): what the profile holds, said when it changes
-    static std::string lastGuns = "-";
-    if (guns != lastGuns) LOGI("Profile weapons:%s", guns.empty() ? " none" : guns.c_str()), lastGuns = guns;
+    // a partner left with no weapons after a load (29.10): what the profile holds, said when a weapon comes or goes
+    static std::string lastTypes = "-";
+    if (types != lastTypes) LOGI("Profile weapons:%s", guns.empty() ? " none" : guns.c_str()), lastTypes = types;
     w.U8(me->FightingStyle());
     w.U8(info.maxHealth);
     w.U8(info.maxArmour);
@@ -804,6 +817,7 @@ bool ApplyProfile(const std::vector<uint8_t>& blob, bool& lookOwn, bool& boughtO
         Ref<int32_t>(kStatsBlock + kFloatStats + (uintptr_t)id * 4) = world[kFloatStats / 4 + id];  // the floats' bits
     memcpy(me->ClothesDesc(), clothes.data(), kClothesSize);
     RebuildPlayer(me, false);  // body from the profile's fat/muscle stats
+    LOGI("Profile look put on: %08X", LookSum(clothes.data()));
     GiveWeapons(h, slots);
     me->FightingStyle() = fight;
     if (version >= 4) Field<uint8_t>(me, 0x72E) = moves;
@@ -899,6 +913,10 @@ public:
             // an empty profile after a real one, or during a prologue, in the same session (the first one of a session
             // is the newcomer's): the host began a new game, which this game is not in yet
             if (blob.empty() && p.m_profileReceived && (!p.m_profile.empty() || !flow::InHostWorld())) p.m_resetPending = true;
+            // The game named again after another one (a host that named the game it came from, then the server's): the
+            // reset stayed up, nothing was applied or saved till the next world load, and that load put this stale
+            // profile over everything played since.
+            if (!blob.empty()) p.m_resetPending = false;
             p.m_profile = blob;
             p.m_profileReceived = true;
             p.m_applied = false;
@@ -914,9 +932,9 @@ public:
         Net().SetHandler(proto::G_HOST_SAVED, [](uint8_t from, Reader&) {
             if (from != Net().HostId() || Net().IsHost() || !Instance().m_applied || !core::IsPlayerReady()) return;
             Instance().SaveNow(true);
-            Instance().KeepWeaponsOfSave();
-            ui::TheChat().AddSystem(TR("Хост сохранил игру. Ваши деньги, навыки и внешность тоже сохранены.",
-                                       "The host saved the game. Your money, skills and look are saved too."));
+            if (Instance().m_hostLoad) Instance().KeepWeaponsOfSave();  // a host playing a save of its own (it names its loads)
+            ui::TheChat().AddSystem(TR("Хост сохранил игру. Деньги, оружие, навыки и внешность тоже сохранены.",
+                                       "The host saved the game. Money, weapons, skills and look saved too."));
         });
     }
 
@@ -985,7 +1003,13 @@ public:
         if (!Net().Online() || !core::IsPlayerReady()) return;
         CPlayerPed* me = FindPlayerPed(0);
         uint64_t now = NowMs();
-        if (Net().IsHost() && (g_newGame || now - g_gameStartMs > 5000) && (!g_gameSentOk || g_gameSent != g_gameId)) {
+        // only in the host's world: a game of its own (joined from single player, waiting) or an old world during a
+        // new game's prologue is no profile, it would have gone to the server as one
+        bool hostWorld = flow::InHostWorld();
+        // A host names the game once its game is the session's. One that came from a game of its own to a server that
+        // keeps a world named that game in the seconds before the server's world loaded: the server moved every
+        // partner to that game's profiles (none), and back a few seconds later.
+        if (Net().IsHost() && hostWorld && (g_newGame || now - g_gameStartMs > 5000) && (!g_gameSentOk || g_gameSent != g_gameId)) {
             Writer w(proto::C_GAME_ID);
             w.U32(g_gameId);
             Net().Send(proto::CH_RELIABLE, w);
@@ -993,8 +1017,12 @@ public:
             g_gameSentOk = true;
             LOGI("The host plays game %08X: the partners get its profiles", g_gameId);
         }
-        // again now and then: a partner who came later has it
-        if (Net().IsHost() && !Net().Peers().empty() && (g_hostLoadSent != g_hostLoad || now - g_hostLoadSentMs >= 15000)) {
+        // again now and then: a partner who came later has it. Not from a guest host: the world it loaded is the
+        // server's, no save of its own gone back to. Each host that took the server's world counted as "the host loaded
+        // a game", and every partner got the weapons its PC had kept at some earlier save in place of its profile's
+        // (17.11: none after a death as host, two guns again on the next visit as a partner).
+        if (Net().IsHost() && !g_guestHost && !Net().Peers().empty() &&
+            (g_hostLoadSent != g_hostLoad || now - g_hostLoadSentMs >= 15000)) {
             Writer w(proto::G_HOST_LOADED);
             w.U32(g_hostLoad);
             Net().Send(proto::CH_RELIABLE, w);
@@ -1002,9 +1030,6 @@ public:
             g_hostLoadSentMs = now;
         }
 
-        // only in the host's world: a game of its own (joined from single player, waiting) or an old world during a
-        // new game's prologue is no profile, it would have gone to the server as one
-        bool hostWorld = flow::InHostWorld();
         if (ProfilePlayer() && hostWorld && m_profileReceived && !m_applied && !m_resetPending) {
             m_applied = true;
             bool own = false, boughtOwn = false;
@@ -1018,24 +1043,29 @@ public:
                     LOGI("First visit: the gym's workout of the host's world (%d.%d) is not ours, the machines are free",
                          Global(5347), Global(5348));
                 Global(5347) = Global(5348) = Global(5349) = 0;
-                ui::TheChat().AddSystem(fresh ? TR("Хост начал новую игру. Деньги, оружие, навыки и внешность у вас тоже начинаются заново.",
-                                                   "The host started a new game. Your money, weapons, skills and look start over too.")
-                                              : TR("Вы здесь впервые. Дальше деньги, навыки и внешность у вас будут свои.",
-                                                   "You are here for the first time. From now on your money, skills and look "
-                                                   "are your own."));
+                ui::TheChat().AddSystem(fresh ? TR("Хост начал новую игру. Деньги, оружие, навыки и внешность тоже начинаются заново.",
+                                                   "The host started a new game. Money, weapons, skills and look start over too.")
+                                              : TR("Первый визит: профиля на сервере ещё нет. Деньги, оружие, навыки и внешность "
+                                                   "дальше хранит сервер.",
+                                                   "First visit: no profile on the server yet. Money, weapons, skills and look "
+                                                   "are kept by the server from here on."));
                 m_reset = false;
             } else if (ApplyProfile(m_profile, own, boughtOwn)) {
-                LOGI("Profile applied (%zu bytes)", m_profile.size());
+                LOGI("Profile applied (%zu bytes, game %08X)", m_profile.size(), m_profileGame);
                 m_quietUntil = now + 5000;
-                ui::TheChat().AddSystem(TR("Загружены ваши деньги, навыки и внешность.", "Your money, skills and look are loaded."));
+                ui::TheChat().AddSystem(TR("Деньги, оружие, навыки и внешность загружены с сервера.",
+                                           "Money, weapons, skills and look loaded from the server."));
             } else {
                 LOGW("Profile rejected (bad format), starting from the world's state");
             }
-            g_lookOwn = own || (!fresh && WearOwnLook(m_profile.empty()));
+            // The server's profile is the character: the look kept on this PC (the CJ of a single-player game) goes on
+            // at a first visit only. It also replaced the look of a profile whose clothes were never changed on the
+            // server, at any later visit, once this PC had a single-player CJ to bring.
+            g_lookOwn = own || !m_profile.empty() || (!fresh && WearOwnLook(true));
             if (!g_lookOwn) memcpy(g_givenKeys, me->ClothesDesc(), sizeof g_givenKeys);
             if (!boughtOwn && !fresh) BringOwnBought();
             m_saved = m_profile;
-            m_lastSaveMs = now;
+            m_lastSaveMs = m_profile.empty() ? 0 : now;  // a first visit's character is on the server at once
             g_statBased = false;  // the profile's stats are ours: the shared ones start from them
         }
 
@@ -1126,10 +1156,10 @@ public:
                  l.special.c_str());
         }
 
-        // the partner's profile goes to the server when it changed (checked every 30 s), and 3 s after a new look settled
-        // (bought clothes, a haircut): the host's world, reloaded at the next mission's marker, took the purchase back (#21)
+        // the profile goes to the server when it changed (checked every 5 s), and 3 s after a new look settled (bought
+        // clothes, a haircut): the host's world, reloaded at the next mission's marker, took the purchase back (#21)
         bool lookToSave = ProfilePlayer() && m_lookChangedMs > m_lastSaveMs && now - m_lookChangedMs >= 3000;
-        if ((now - m_lastSaveMs >= 30000 || lookToSave) && hostWorld) SaveNow();
+        if ((now - m_lastSaveMs >= kSaveEveryMs || lookToSave) && hostWorld) SaveNow();
     }
 
     // the host saved: what we carry now is what its load brings back. Dead, we carry nothing we had: the last save's stay.
@@ -1161,8 +1191,8 @@ public:
         WriteFileBytes(path, &s, sizeof s);
         GiveWeapons(GetPedRef(FindPlayerPed(0)), s.slots);
         SaveNow(true);
-        ui::TheChat().AddSystem(TR("Хост загрузил игру. Ваше оружие снова как при его сохранении.",
-                                   "The host loaded a game. Your weapons are back as they were at that save."));
+        ui::TheChat().AddSystem(TR("Хост загрузил игру. Оружие снова как при его сохранении.",
+                                   "The host loaded a game. Weapons are back as they were at that save."));
     }
 
     void SaveNow(bool always = false) {
@@ -1176,7 +1206,12 @@ public:
         Net().Send(proto::CH_RELIABLE, w);
         m_saved = std::move(blob);
         m_profile = m_saved;  // a reload of the world re-applies the latest state
-        LOGI("Profile saved (%zu bytes)", m_saved.size());
+        ++m_savesUntold;
+        if (always || m_lastSaveMs - m_saveToldMs >= 60000) {  // a line a minute: it goes every 5 s while the player moves
+            LOGI("Profile saved (%zu bytes, game %08X, %u time(s) since the last line)", m_saved.size(), m_profileGame, m_savesUntold);
+            m_saveToldMs = m_lastSaveMs;
+            m_savesUntold = 0;
+        }
     }
 
     static Progress& Instance() {
@@ -1194,13 +1229,15 @@ private:
     uint32_t m_hostLoad = 0, m_loadChecked = 0;  // the host's load of its game (G_HOST_LOADED), and the one looked at
     uint64_t m_lastSaveMs = 0, m_lastLookMs = 0, m_lookSentMs = 0, m_statsSentMs = 0, m_quietUntil = 0;
     uint64_t m_lookChangedMs = 0;  // our look last changed
+    uint64_t m_saveToldMs = 0;     // the log's last "Profile saved"
+    uint32_t m_savesUntold = 0;    // saves since that line
 };
 
 void PartnerSaved() {
     if (!flow::InHostWorld()) return;
     Progress::Instance().SaveNow(true);
-    ui::TheChat().AddSystem(TR("Ваши деньги, навыки и внешность сохранены и у хоста.",
-                               "Your money, skills and look are saved on the host's side too."));
+    ui::TheChat().AddSystem(TR("Деньги, оружие, навыки и внешность сохранены и на сервере.",
+                               "Money, weapons, skills and look saved on the server too."));
 }
 
 struct Reg {
