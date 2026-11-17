@@ -40,6 +40,8 @@ enum MsgId : uint8_t {
     C_WORLD_NEWGAME = 10,    // host: it plays a new game's prologue (no save of it can exist yet)
     C_WORLD_FOLLOW = 11,     // host: the prologue is over but cannot be saved yet: partners follow in a new game
     C_GAME_ID = 12,          // host: u32 game it plays (0 = unknown save): the partners' profiles are per game
+    C_SETTINGS_GET = 13,     // the server's settings, please (answered with S_SETTINGS)
+    C_SETTINGS_SET = 14,     // an admin: str section, str key, str value (Settings.h)
 
     // ---- server -> client ----
     S_WELCOME = 20,          // see Welcome
@@ -60,6 +62,8 @@ enum MsgId : uint8_t {
     S_WORLD_NEWGAME = 35,    // to a partner: start a new game and join the host where the prologue left it
     S_WORLD_WAIT = 36,       // to a partner: the host plays a new game's prologue, keep waiting
     S_BALANCE = 37,          // the game's balance settings (Balance.h), on join and after an admin's /reloadbalance
+    S_SETTINGS = 38,         // the server's settings (Settings.h): on C_SETTINGS_GET, and to everyone when one changes
+    S_RULES = 39,            // the game's rules changed while it runs (Settings.h, Rules)
 
     // ---- relayed game messages (client <-> client) ----
     G_FIRST = 64,

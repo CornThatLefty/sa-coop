@@ -671,6 +671,98 @@ def dedicated_host_is_asked_for_snapshots(make):
     a.expect(r"EVT WORLD_WANTED", 4.0)  # and again
 
 
+@test
+def host_of_a_standing_server_gets_its_stored_world(make):
+    """Outside dedicated mode too: the first player in is the host, the welcome says a world is stored, and the host's
+    request for it is answered with it (its game loads that world instead of asking for a save)."""
+    s = make(start=False)
+    seed, seed_crc = make_world(s, "seed.b", 70)
+    s.args += ["--world", str(seed)]
+    s.start()
+    a = s.join("Alice")
+    check(a.host == a.id and a.world == 1, "the first player is the host of a server with a world")
+    a.send("request")
+    got_world(a, seed_crc)
+
+
+def settings_of(p):
+    """The next S_SETTINGS of a player: (may it edit, {"section.key": value})."""
+    m = p.expect(r"EVT SETTINGS ok=1 edit=(\d) n=\d+ (.*)")
+    items = {}
+    for part in re.findall(r"(\S+?\.\S+?)=(.*?);k\d;f\d", m[2]):
+        items[part[0]] = part[1].strip()
+    return m[1] == "1", items
+
+
+@test
+def settings_are_read_and_changed_from_the_game(make):
+    """The host reads the settings and changes them: in effect at once, told to everyone, written to server.ini."""
+    s = make("password = secret\n")
+    a = s.join("Alice", password="secret")
+    b = s.join("Bob", password="secret")
+    a.send("settings")
+    edit, items = settings_of(a)
+    check(edit, "the host may edit")
+    check(items.get("server.friendly_fire") == "0" and items.get("server.max_players") == "4", f"the values: {items}")
+    check(items.get("server.password") == "1", "a password that is set shows as set, never as its text")
+    check(items.get("balance.payout_mode") == "split" and "balance.price_weapons" in items, f"the balance: {items}")
+    b.send("settings")
+    edit, items = settings_of(b)
+    check(not edit, "a partner may not edit")
+    check("server.password" not in items and "server.admins" not in items, "a partner is not shown the admins' settings")
+
+    a.send("set server friendly_fire 1")
+    for p in (a, b):
+        p.expect(r"EVT RULES ok=1 name=test ff=1 tp=1 life=0 cheats=1")
+    check(settings_of(b)[1].get("server.friendly_fire") == "1", "the change reaches a partner's window")
+    check(re.search(r"(?m)^friendly_fire = 1", s.ini.read_text(encoding="utf-8")), "server.ini has the change")
+
+    a.send("set balance price_weapons 4.5")
+    for p in (a, b):
+        check(near(p.balance()["price_weapons"], 4.5), f"{p.name}: the price")
+    a.send("set balance payout_mode full")
+    check(near(b.balance()["payout_mode"], 0), "the payout mode by its word")
+    text = s.ini.read_text(encoding="utf-8")
+    check(re.search(r"(?m)^price_weapons = 4.5", text) and re.search(r"(?m)^payout_mode = full", text), "server.ini has the balance")
+
+    b.send("set server friendly_fire 0")
+    b.expect(r"EVT CHAT from=255 The server's settings are changed by the host or an admin")
+    a.send("set server max_players 9")
+    a.expect(r"EVT CHAT from=255 Setting max_players: not a value")
+    a.send("set balance price_weapons 99999")
+    a.expect(r"EVT CHAT from=255 Setting price_weapons: not a value")
+    a.refuse(r"EVT BALANCE")
+
+
+@test
+def settings_hold_after_a_restart_and_passwords_change_live(make):
+    s = make("max_players = 2\n")
+    a = s.join("Alice")
+    a.send("set server max_players 3")
+    a.send("set server password letmein")
+    a.send("set server dedicated 1")
+    a.expect(r"EVT CHAT from=255 Server setting: dedicated = 1 \(Alice\), from the server's next start")
+    a.settle()
+    b = s.join("Bob", expect_welcome=False)
+    b.expect(r"EVT REJECT")                      # the new password holds at once
+    b2 = s.join("Bob", password="letmein")
+    c = s.join("Carol", password="letmein")       # a third player: max_players was raised under a running server
+    check(c.id is not None, "the third player is in")
+    a.send("settings")
+    check(settings_of(a)[1].get("server.dedicated") == "1", "a setting for the next start shows as written")
+    b2.send("chat /players")
+    b2.expect(r"EVT CHAT from=255 \[\d+\] Bob")
+    for p in (a, b2, c):
+        p.quit()
+    s.restart()
+    a2 = s.join("Alice", password="letmein", expect_welcome=False)
+    a2.expect(r"EVT WELCOME ok=1 .* dedicated=1 ")
+    a2.send("settings")
+    edit, items = settings_of(a2)
+    check(items.get("server.max_players") == "3" and items.get("server.dedicated") == "1", f"after the restart: {items}")
+    check(not edit, "dedicated: the host role gives no rights")
+
+
 def main():
     global VERBOSE
     ap = argparse.ArgumentParser()

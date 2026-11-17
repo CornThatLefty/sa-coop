@@ -937,6 +937,10 @@ public:
         g_statBased = false;
         g_foreignGame = Net().Online() && !Net().IsHost();
         g_gameId = GameOfSlot(SlotOfSave((const char*)0xC15FC8));  // CGenericGameStorage::ms_LoadFileName: the save loaded
+        // The host of a server standing on its own plays the world that server keeps (flow): the game is the one the
+        // server names. The world's local copy is no slot: it read as game 0, the host said "game 0", and the server
+        // gave every partner the profiles of game 0 instead of this game's. It is no game of this player's own either.
+        if (flow::TakeHostServerWorld()) g_gameId = Net().ServerGameId(), g_foreignGame = true;
         g_newGame = false;
         g_gameStartMs = NowMs();
         if (m_resetPending && flow::InHostWorld()) m_reset = true, m_resetPending = false;  // the new game's world

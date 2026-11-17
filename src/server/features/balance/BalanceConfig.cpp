@@ -50,6 +50,9 @@ std::vector<std::string> List(const std::string& text) {
 
 }  // namespace
 
+std::string BalanceValueText(int key, float value) { return ShowValue(key, value); }
+bool ParseBalanceValue(int key, const std::string& text, float& out) { return ParseValue(key, text, out); }
+
 std::wstring BalanceExcludePath(const std::wstring& serverIni) {
     size_t slash = serverIni.find_last_of(L"\\/");
     return (slash == std::wstring::npos ? std::wstring() : serverIni.substr(0, slash + 1)) + L"balance_exclude.ini";

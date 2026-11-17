@@ -49,7 +49,8 @@ bool Server::Start(const Config& cfg) {
     }
     addr.port = m_cfg.port;
     // a couple of spare peers so that "server full" can be reported politely
-    m_host = enet_host_create(&addr, (size_t)m_cfg.maxPlayers + 2, CH_COUNT, 0, 0);
+    // for the most players the game takes, not max_players: that one can be raised while the server runs (Settings.cpp)
+    m_host = enet_host_create(&addr, (size_t)kMaxPlayers + 2, CH_COUNT, 0, 0);
     if (!m_host) {
         LOGE("Не удалось открыть UDP-порт %u (занят другим процессом?)", m_cfg.port);
         return false;
@@ -296,6 +297,12 @@ void Server::OnPacket(ENetPeer* peer, uint8_t channel, const uint8_t* data, size
         case C_WORLD_FOLLOW:
             if (p->isHost) FollowersJoin();
             break;
+        case C_SETTINGS_GET:
+            SendSettings(*p);
+            break;
+        case C_SETTINGS_SET:
+            HandleSettingsSet(*p, r);
+            break;
         case C_STATUS: {
             uint8_t st = r.U8();
             bool becameInGame = st == STATUS_INGAME && p->status != STATUS_INGAME;
@@ -482,6 +489,7 @@ void Server::HandleCommand(Player* p, const std::string& text) {
             reply(kColorServer, "В игре: /tp (переместиться к напарнику), /tphere (позвать напарника к себе). Напарник отвечает Y или N",
                   "In the game: /tp (go to your partner), /tphere (bring your partner to you). Your partner answers Y or N");
         reply(kColorServer, "F2: игроки, у кого сколько денег, перевод денег", "F2: the players, their money, giving money");
+        reply(kColorServer, "F8: настройки сервера", "F8: the server's settings");
         reply(kColorServer, "U: анимации. F4: скины", "U: animations. F4: skins");
     } else if (cmd == "players" || cmd == "status") {
         for (auto& o : m_players) {

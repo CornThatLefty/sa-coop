@@ -312,17 +312,6 @@ void RenderConnectMenu() {
             cy += ch + 6 * s;
             if (int d = w::Selector("blip", cx, cy, 360 * s, rowH, i < 5 ? names[i] : Cfg().markColour))
                 Players::Instance().SetMarkColour(kColours[((i < 5 ? i : 0) + d + 5) % 5]);
-        } else {
-            cy += 18 * s;
-        }
-        // the names, health and armour over the other players (also /names in the chat), saved at once: beside the
-        // colour's selector, or in its place when the marks are off
-        {
-            bool tags = Cfg().nameTags;
-            float box = lh * 0.8f;
-            if (w::Checkbox("names", Cfg().partnerBlip ? cx + 392 * s : cx, cy + (rowH - box) * 0.5f,
-                            TR("Подписи над игроками", "Name tags over players"), tags))
-                Players::Instance().SetNameTags(tags);
             cy += rowH;
         }
     } else if (busy) {

@@ -29,6 +29,10 @@ void Session::Connect(const std::string& host, uint16_t port, const std::string&
     m_myId = m_hostId = 255;
     m_balance = proto::Balance();
     m_balanceRevision = 0;
+    m_settings = proto::Settings();
+    m_settingsRevision = 0;
+    m_serverHasWorld = false;
+    m_serverGameId = 0;
     m_state = State::Connecting;
     if (!m_net.Start(host, port)) {
         m_state = State::Failed;
@@ -48,6 +52,19 @@ void Session::Disconnect(const std::string& reason) {
     if (wasOnline && onOffline) onOffline(reason);
     m_balance = proto::Balance();
     m_balanceRevision = 0;
+}
+
+void Session::RequestSettings() {
+    if (Online()) Send(proto::CH_RELIABLE, Writer(proto::C_SETTINGS_GET));
+}
+
+void Session::SetSetting(const std::string& section, const std::string& key, const std::string& value) {
+    if (!Online()) return;
+    Writer w(proto::C_SETTINGS_SET);
+    w.Str(section, 16);
+    w.Str(key, 40);
+    w.Str(value, 512);
+    Send(proto::CH_RELIABLE, w);
 }
 
 const PeerInfo* Session::Peer(uint8_t id) const {
@@ -157,6 +174,8 @@ void Session::HandleService(uint8_t id, Reader& r) {
             m_partnerTeleport = w.partnerTeleport;
             m_sharedLife = w.sharedLife;
             m_partnerCheats = w.partnerCheats;
+            m_serverHasWorld = w.worldAvailable;
+            m_serverGameId = w.gameId;
             m_peers.clear();
             for (auto& p : w.players) m_peers[p.id] = PeerInfo{p.id, p.name, p.isHost, 0};
             m_state = State::Online;
@@ -208,6 +227,7 @@ void Session::HandleService(uint8_t id, Reader& r) {
         }
         case S_HOST_CHANGED: {
             m_hostId = r.U8();
+            if (r.Remaining() >= 4) m_serverGameId = r.U32();
             for (auto& [pid, p] : m_peers) p.isHost = pid == m_hostId;
             if (onHostChanged) onHostChanged(m_hostId);
             break;
@@ -302,6 +322,29 @@ void Session::HandleService(uint8_t id, Reader& r) {
         case S_WORLD_WANTED:
             if (onWorldWanted) onWorldWanted();
             break;
+        case S_SETTINGS: {
+            proto::Settings s;
+            if (!s.Read(r)) {
+                LOGW("S_SETTINGS is damaged: the settings stay as they were");
+                break;
+            }
+            m_settings = std::move(s);
+            ++m_settingsRevision;
+            break;
+        }
+        case S_RULES: {
+            proto::Rules rules;
+            if (!rules.Read(r)) break;
+            m_serverName = rules.serverName;
+            m_friendlyFire = rules.friendlyFire;
+            m_partnerTeleport = rules.partnerTeleport;
+            m_sharedLife = rules.sharedLife;
+            m_partnerCheats = rules.partnerCheats;
+            LOGI("The game's rules now: friendly fire %d, partners' teleport %d, shared life %d, partners' cheats %d", m_friendlyFire,
+                 m_partnerTeleport, m_sharedLife, m_partnerCheats);
+            if (onRules) onRules();
+            break;
+        }
         case S_BALANCE: {
             proto::Balance b;
             if (!b.Read(r)) {

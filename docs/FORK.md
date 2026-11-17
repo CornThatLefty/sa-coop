@@ -12,7 +12,9 @@ All players and the server must run the same fork build: the protocol version di
 - [Combat scaling](#combat-scaling)
 - [Shop prices](#shop-prices)
 - [Payouts](#payouts)
-- [Name tags switch](#name-tags-switch)
+- [Player options in the F2 window](#player-options-in-the-f2-window)
+- [Server settings window (F8)](#server-settings-window-f8)
+- [Host of a standing server plays its world](#host-of-a-standing-server-plays-its-world)
 - [Server additions](#server-additions)
 - [Dedicated mode](#dedicated-mode)
 - [Linux server](#linux-server)
@@ -188,16 +190,65 @@ mode the late joiner still receives everything earned since the job began, as up
 Unchanged: gifts between players (F2), pool stakes, contest winnings, and non-money completion rewards of side jobs
 (max health, armour, fireproof and the like), which every player still receives.
 
-## Name tags switch
+## Player options in the F2 window
 
-The names, health and armour bars over the other players could be turned off only by `name_tags = 0` in `[game]` of
-`coop\coop.ini`, read at the game's start. Test build 4 adds two switches that act at once and write the same key:
+The F2 window (the player list) holds each player's own options under its rows. They act at once, are kept in
+`[game]` of `coop\coop.ini`, and are not sent to anyone.
 
-- the `Name tags over players` checkbox of the F9 window, shown while connected, beside the mark colour;
-- `/names` in the chat (turns them over), `/names on`, `/names off`.
+| Option | Key | Effect |
+| --- | --- | --- |
+| `Name tags over players` | `name_tags` | The names, health and armour bars over the other players. Also `/names`, `/names on`, `/names off` in the chat |
+| `Chat on screen` | `chat` | The chat's lines. Off, the chat is drawn only while it is typed into (T), so notices of the mod and the server are hidden with it |
 
-The setting is each player's own: it changes what that player's game draws and is not sent to anyone. Source:
-`Players::SetNameTags` in `src/client/entities/player`.
+Test build 4 had the name tags' checkbox in the F9 window; test build 6 moved it here. Source:
+`Players::SetNameTags`, `Players::SetChatShown` in `src/client/entities/player`, the window in
+`src/client/pages/players-menu`.
+
+## Server settings window (F8)
+
+F8 in the game opens the server's settings: the `[server]` and `[balance]` sections of its `server.ini` on three tabs
+(Server, Combat, Economy). The host of a game started from the F9 window and a server's admins change them there;
+other players see the values without the passwords and the admin list.
+
+A change is in effect at once, is written to `server.ini`, and is told to every player in the chat
+(`Server setting: friendly_fire = 1 (Alice).`).
+
+| Kind | Control | Settings |
+| --- | --- | --- |
+| On or off | Checkbox | `friendly_fire`, `partner_teleport`, `shared_life`, `partner_cheats` |
+| Number | Arrows, one step a click | `max_players`, `snapshot_minutes`, every `[balance]` multiplier and `mission_scale_radius_m` |
+| Choice | Arrows | `payout_mode` |
+| Text | Text box, Enter applies | `name`, `host`, `motd`, `admins` |
+| Password | Text box, Enter applies; shown as set or none, never as text | `password`, `admin_password` |
+| From the server's next start | Checkbox, marked so | `dedicated`, `internet` |
+
+Not in the window: `port`, `bind` and `turn` (they cannot change under a running server, and a hosting panel sets the
+port), and `balance_exclude.ini` (edited as a file, `/reloadbalance` reads it again).
+
+`max_players` can be raised while the server runs: the server opens its connection slots for the game's maximum, not
+for the value it started with. A game hosted from the F9 window starts its server with that window's choices, so the
+host's game writes the four rules back to `coop.ini` when they change here.
+
+**Wire** (protocol 65): `C_SETTINGS_GET`, `C_SETTINGS_SET` (section, key, value), `S_SETTINGS` (the list with each
+setting's kind, limits and flags: the window draws what it is sent, so a setting a later server adds shows under its
+key), `S_RULES` (the server's name and the four rules, to everyone when one changes).
+`src/common/api/protocol/Settings.h`, `src/server/app/server/Settings.cpp`, `src/client/pages/server-menu`.
+
+## Host of a standing server plays its world
+
+A player who joins a server that stands on its own (a Linux or panel-hosted one, not the server its own game starts)
+and gets the host role was told "start a new game or load a save" on every join, and the save it picked replaced the
+server's world. Since test build 6 such a host asks the server for its stored world and loads it, as every partner
+does. With no world on the server the choice is asked as before.
+
+- Another story on that server: an admin's `/newgame` clears the stored world (kept as backup 1); the host's next
+  game becomes the world.
+- The host names the game to the server by the id the server's welcome carried, not by the local copy's (which read
+  as game 0 and moved every partner to the profiles of game 0).
+- The host plays the world's CJ as saved. Profiles for the host (its own money, weapons and look on top of the shared
+  world) are part of the anyone-can-host work and are not built.
+
+Source: `OnOnline`, `OnWorldReceived` in `src/client/entities/session/Flow.cpp`, `features/progress`.
 
 ## Server additions
 
@@ -223,7 +274,7 @@ password on a server open to strangers. With `admin_password` set, a named playe
 session; with a password and an empty `admins` list, any player who knows the password can. On a server hosted from
 the F9 window the host is an admin too, as before.
 
-**Wire additions** (protocol 64, appended fields that an older fork build skips): `S_WELCOME` carries `dedicated`, the
+**Wire additions** (since protocol 64, appended fields that an older fork build skips): `S_WELCOME` carries `dedicated`, the
 game id and the world version; `S_WORLD_BEGIN` the world version; `S_HOST_CHANGED` the game id.
 
 ## Dedicated mode

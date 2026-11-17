@@ -97,6 +97,8 @@ public:
     void SetMarkColour(const std::string& colour);
     // the other players' names, health and armour over their heads, on or off: at once, and kept in coop.ini (name_tags)
     void SetNameTags(bool on);
+    // the chat's lines on the screen, on or off: at once, and kept in coop.ini (chat). Off, it shows while typed into.
+    void SetChatShown(bool on);
     // the other players as arrows turned with their heading, at the end of CRadar::DrawBlips (the radar and the menu
     // map): Waypoints' hook of it calls this, and says whether it is in (MinHook takes one hook per function)
     void DrawRadarArrows();

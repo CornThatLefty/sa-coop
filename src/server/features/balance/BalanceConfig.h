@@ -16,5 +16,8 @@ proto::Balance LoadBalance(const std::wstring& serverIni, std::string& summary);
 void WriteBalanceDefaults(const std::wstring& serverIni);
 
 std::wstring BalanceExcludePath(const std::wstring& serverIni);
+// One value as server.ini holds it ("1.5", "split" for payout_mode), and read back from such a text (false: no value)
+std::string BalanceValueText(int key, float value);
+bool ParseBalanceValue(int key, const std::string& text, float& out);
 
 }  // namespace coop::server

@@ -63,7 +63,11 @@ the release named in its `Release` variable from GitHub and starts `./coop-serve
   replaces the program and keeps both files and `server-data`.
 - The console takes the server's commands (`players`, `say <text>`, `kick <name>`, `reloadbalance`). The panel's stop
   button sends `quit`.
-- A new release: change the `Release` variable and reinstall.
+- A new release: the server's **Reinstall** action. With the `Release` variable at `latest` (its preset) it takes the
+  newest release, test builds included; a tag such as `v0.3.4-fork.6` pins one. `release.txt` beside the server names
+  the installed one. The server does not update itself: every player's game has to be the same build, so the update
+  is a deliberate step.
+- The egg carries its own update address: the panel's egg page can refresh it from the repository.
 
 ## Without systemd
 

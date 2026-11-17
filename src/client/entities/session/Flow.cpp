@@ -48,6 +48,8 @@ bool g_prologue = false;            // host: a new game's prologue runs (it cann
 bool g_afterPrologue = false;       // host: and is over, no save of this game has gone out yet
 bool g_prologueWait = false;        // partner: the host plays a new game's prologue
 bool g_worldNone = false;           // partner: the server has no world for us yet (the host is still in the menu)
+bool g_hostWorldAsked = false;      // host of a server standing on its own: its world was asked for, to play it
+bool g_hostServerWorld = false;     // host: and loads now (the game that starts next is the server's: TakeHostServerWorld)
 uint64_t g_gameStartedAt = 0, g_snapshotTriedAt = 0;
 bool g_follower = false;            // partner: in a new game of its own next to the host, until its first save
 bool g_progressUpload = false;      // host: the next snapshot goes to the partners in the game as well
@@ -225,8 +227,18 @@ bool SameMainScm(const std::vector<uint8_t>& save);  // below
 
 void OnOnline() {
     auto& net = Net();
+    g_hostWorldAsked = g_hostServerWorld = false;
     if (net.IsHost()) {
-        if (g_hostSlot > 0 && !core::IsInGame()) {
+        if (!g_isHosting && net.ServerHasWorld()) {
+            // A server standing on its own (not the one this game started) that keeps a world: the host plays that
+            // world, as every partner does. It was asked "start a new game or load a save" each time it joined, and
+            // the save it picked replaced the server's world. An admin's /newgame clears the world for another story.
+            g_hostWorldAsked = true;
+            ui::TheChat().AddSystem(TR("На сервере есть мир. Загружаем его...", "The server has a world. Loading it..."));
+            Writer w(C_WORLD_REQUEST);
+            net.Send(CH_BULK, w);
+            SetPhase(Phase::WaitingWorld);
+        } else if (g_hostSlot > 0 && !core::IsInGame()) {
             ui::TheChat().AddSystem(Format(TR("Загружаем сохранение из слота %d...", "Loading the save from slot %d..."), g_hostSlot));
             // The host's own save goes through the same check as the host's world on a partner: one of another main.scm
             // crashed the host's game in its first scripts, before any session (16.11, 0x465F3F)
@@ -462,6 +474,7 @@ void Join(const std::string& hostArg, uint16_t port, const std::string& password
     }
     g_error.clear();
     g_isHosting = false;
+    g_hostSlot = 0;  // a slot picked for a game hosted earlier is not this server's
     g_hostAddr = host;
     g_port = port;
     g_password = password;
@@ -484,6 +497,7 @@ void Leave() {
     Net().Disconnect();
     StopServerProcess();
     g_isHosting = g_follower = g_prologueWait = g_worldNone = g_progressUpload = g_hasSpot = false;
+    g_hostWorldAsked = g_hostServerWorld = false;
     g_pendingWorld.clear();
     SetPhase(Phase::Idle);
     ui::TheChat().AddSystem(TR("Вы вышли из совместной игры.", "You left the co-op game."));
@@ -693,6 +707,17 @@ void Update() {
     }
 }
 
+void OnRulesChanged() {
+    auto& net = Net();
+    if (!g_isHosting || !net.Online()) return;
+    auto& cfg = Cfg();
+    cfg.friendlyFire = net.FriendlyFire();
+    cfg.partnerTeleport = net.PartnerTeleport();
+    cfg.sharedLife = net.SharedLife();
+    cfg.partnerCheats = net.PartnerCheats();
+    SaveConnectSettings();
+}
+
 void RequestFreshWorld() {
     g_worldUploadPending = true;
     g_keepSent = false;  // a new request gets its own answer
@@ -700,14 +725,24 @@ void RequestFreshWorld() {
 
 // The server keeps us waiting for the host's game (it gives no stored world while the host is in the menu): no time
 // limit then, as in the prologue. The partner gave up after 2 minutes, "the host never sent the world".
+// host: the world asked of a server standing on its own does not come (it has none after all, or holds it back)
+void HostWorldNotComing() {
+    if (!std::exchange(g_hostWorldAsked, false)) return;
+    SetPhase(core::IsInGame() ? Phase::Playing : Phase::Idle);
+    if (core::IsInGame()) g_worldUploadPending = true;  // the game it is in becomes the world
+    else ui::TheChat().AddSystem(TR("Мира на сервере нет. Начните новую игру или загрузите сохранение.",
+                                    "The server has no world. Start a new game or load a save."));
+}
+
 void OnWorldNone() {
-    if (Net().IsHost()) return;
+    if (Net().IsHost()) return HostWorldNotComing();
     g_worldNone = true;
     g_phaseTime = NowMs();
 }
 
 void OnHostInPrologue() {
-    if (Net().IsHost() || g_prologueWait) return;
+    if (Net().IsHost()) return HostWorldNotComing();
+    if (g_prologueWait) return;
     g_prologueWait = true;
     g_pendingWorld.clear();  // the old game's progress is no world to load any more
     g_hasSpot = false;
@@ -825,7 +860,8 @@ void LoadHostWorld(const std::vector<uint8_t>& data) {
         return;
     }
     ui::TheChat().AddSystem(g_follower ? TR("Пролог позади. Загружаем мир хоста...", "The prologue is over. Loading the host's world...")
-                                       : TR("Мир хоста получен. Загружаем...", "Got the host's world. Loading..."));
+                            : Net().IsHost() ? TR("Мир сервера получен. Загружаем...", "Got the server's world. Loading...")
+                                             : TR("Мир хоста получен. Загружаем...", "Got the host's world. Loading..."));
     g_follower = g_prologueWait = false;
     if (!core::LoadSaveFile(path)) {
         Fail(TR("Мир хоста не загрузился. Скорее всего, у вас разные версии игры или модов.",
@@ -836,8 +872,16 @@ void LoadHostWorld(const std::vector<uint8_t>& data) {
 }
 }  // namespace
 
+bool TakeHostServerWorld() { return std::exchange(g_hostServerWorld, false); }
+
 void OnWorldReceived(const std::vector<uint8_t>& data) {
-    if (Net().IsHost()) return;
+    if (Net().IsHost()) {  // the world it asked a server standing on its own for (OnOnline); any other is not for a host
+        if (!std::exchange(g_hostWorldAsked, false)) return;
+        g_hostServerWorld = true;
+        LoadHostWorld(data);
+        if (g_phase != Phase::LoadingWorld) g_hostServerWorld = false;
+        return;
+    }
     g_worldNone = false;
     if (g_phase == Phase::Playing && core::IsPlayerReady() && !g_follower) {  // the host's progress: at the next start point
         g_pendingWorld = data;

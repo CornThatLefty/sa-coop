@@ -41,6 +41,7 @@ struct ClientConfig {
                                       // blue, yellow or RRGGBB (empty: the allies' blue)
     bool partnerArrow = true;         // ...drawn as an arrow turned with their heading, as the game draws its player
     bool nameTags = true;             // their names, health and armour over their heads (off for a blind shoot-out)
+    bool chat = true;                 // the chat's lines on the screen (off: seen only while typing into it)
     bool gps = true;                  // the road route to the map target on the radar while driving
 
     // [voice]

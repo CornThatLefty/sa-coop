@@ -168,7 +168,8 @@ void RenderPlayersMenu() {
     float W = std::min(std::max(820 * s, need + 2 * pad), g.Width() - 32 * s), cw = W - 2 * pad;
     std::vector<weapon_gift::Owned> guns = g_giveTo != 0xFF && g_giveGun ? weapon_gift::Ours() : std::vector<weapon_gift::Owned>{};
     float giftH = g_giveTo == 0xFF ? 0.0f : 12 * s + sh + 8 * s + rowH + (guns.empty() ? 0.0f : 8 * s + rowH);
-    float H = 24 * s + mh + 18 * s + ch + 8 * s + rows * (rowH + gap) + giftH + 14 * s + sh + 14 * s + rowH + 20 * s;
+    float optH = 14 * s + ch + 8 * s + lh * 0.8f;  // this player's own options, under the rows
+    float H = 24 * s + mh + 18 * s + ch + 8 * s + rows * (rowH + gap) + giftH + optH + 14 * s + sh + 14 * s + rowH + 20 * s;
     float x = (g.Width() - W) * 0.5f, y = std::max(16 * s, (g.Height() - H) * 0.45f);  // under the contest's board on top
     float cx = x + pad, cy = y + 24 * s;
     w::BeginFrame();
@@ -268,6 +269,17 @@ void RenderPlayersMenu() {
         if (w::Button("give", gx - room, cy, g.TextWidth(FONT_MENU, give) + 2 * room, rowH, give) || enter) Submit();
         else if (w::Button("cancel", kx - room, cy, g.TextWidth(FONT_MENU, cancel) + 2 * room, rowH, cancel)) g_giveTo = 0xFF;
         cy += rowH;
+    }
+    // This player's own options, in effect at once and kept in coop.ini: the names, health and armour over the other
+    // players (also /names), and the chat's lines on the screen
+    cy += 14 * s;
+    g.Text(FONT_MENU_SMALL, cx, cy, TR("Настройки игрока", "Player options"), kSaMuted);
+    cy += ch + 8 * s;
+    {
+        bool tags = Cfg().nameTags, chat = Cfg().chat;
+        if (w::Checkbox("names", cx, cy, TR("Подписи над игроками", "Name tags over players"), tags)) Players::Instance().SetNameTags(tags);
+        if (w::Checkbox("chat", cx + cw * 0.5f, cy, TR("Чат на экране", "Chat on screen"), chat)) Players::Instance().SetChatShown(chat);
+        cy += lh * 0.8f;
     }
     cy += 14 * s;
     if (NowMs() < g_noteUntil) g.Text(FONT_SMALL, cx, cy, g_note, g_noteError ? kSaRed : kSaBlue, TEXT_SHADOW);

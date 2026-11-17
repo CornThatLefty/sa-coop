@@ -22,6 +22,7 @@
 #include "pages/anims-menu/AnimsMenu.h"
 #include "pages/connect-menu/ConnectMenu.h"
 #include "pages/players-menu/PlayersMenu.h"
+#include "pages/server-menu/ServerMenu.h"
 #include "pages/skins-menu/SkinsMenu.h"
 #include "shared/api/net-session/Session.h"
 #include "shared/config/Config.h"
@@ -135,12 +136,14 @@ void RenderOverlay() {
     ui::In().UpdateMouse(g.Width(), g.Height());
     if (IsPlayerReady())
         for (auto* m : Modules()) m->OnRender();
-    g.SetHidden(clean || (g_interfaceHidden && !ui::TheChat().IsOpen()));  // typed into after T: seen
+    // typed into after T: seen, under F7 and with the chat switched off in the F2 window (coop.ini, chat = 0)
+    g.SetHidden(clean || ((g_interfaceHidden || !Cfg().chat) && !ui::TheChat().IsOpen()));
     ui::TheChat().Render();
     g.SetHidden(clean || g_interfaceHidden);
     ui::RenderOverlay();  // after the chat: the contest's board on top hides the ends of its longest lines
     g.SetHidden(clean);   // the windows a key opens are drawn under F7 too
     ui::RenderPlayersMenu();
+    ui::RenderServerMenu();
     ui::RenderAnimsMenu();
     ui::RenderSkinsMenu();
     ui::RenderConnectMenu();
@@ -546,6 +549,10 @@ bool OnKeyDown(int vk, bool repeat) {
         if ((vk == VK_ESCAPE || vk == cfg.playerListKey) && !repeat) ui::SetPlayersMenuVisible(false);
         return true;  // its amount box takes the keys while it is open
     }
+    if (ui::IsServerMenuVisible()) {
+        if ((vk == VK_ESCAPE || vk == VK_F8) && !repeat) ui::SetServerMenuVisible(false);
+        return true;  // its text boxes take the keys while it is open
+    }
     if (ui::IsAnimsMenuVisible()) {
         // a cheat code typed on after its U (UZUMYMW, or BAGUVIX's U in the same frame as its G): closed, the letter goes on
         if (!repeat && vk >= 'A' && vk <= 'Z' && NowMs() - ui::AnimsMenuOpenedMs() < 600 &&
@@ -597,6 +604,10 @@ bool OnKeyDown(int vk, bool repeat) {
     if (vk == cfg.passengerKey && !inMenu && IsPlayerReady()) {
         Players::Instance().TryEnterAsPassenger();
         return false;  // G still reaches the game (gang recruiting)
+    }
+    if (vk == VK_F8 && Net().Online()) {  // the server's settings; after the keys of the F9 window, as F7
+        ui::ToggleServerMenu();
+        return true;
     }
     if (vk == VK_F7 && IsPlayerReady()) {  // last: a key of the F9 window set to F7 is its own
         g_interfaceHidden = !g_interfaceHidden;
@@ -843,6 +854,7 @@ void Init(void* hModule) {
     net.onWorldNewGame = [] { flow::OnNewGameFromHost(); };
     net.onWorldWait = [] { flow::OnHostInPrologue(); };
     net.onWorldNone = [] { flow::OnWorldNone(); };
+    net.onRules = [] { flow::OnRulesChanged(); };
     net.onInvite = [](const std::string& code) {
         if (Net().IsHost())
             ui::TheChat().AddSystem(Format(TR("Код для друга: %s. Скопировать его можно в окне F9.",
