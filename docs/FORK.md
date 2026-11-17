@@ -12,6 +12,7 @@ All players and the server must run the same fork build: the protocol version di
 - [Combat scaling](#combat-scaling)
 - [Shop prices](#shop-prices)
 - [Payouts](#payouts)
+- [Name tags switch](#name-tags-switch)
 - [Server additions](#server-additions)
 - [Dedicated mode](#dedicated-mode)
 - [Tests without the game](#tests-without-the-game)
@@ -169,14 +170,33 @@ takes the difference back from the earner's wallet once, and writes a `Payout:` 
 Chat lines: `Mission reward: $1250 (split 4 ways).` for every player; `Job pay: $50 of $100 (split 2 ways).`,
 `Courier cash: …` and `Export pay: …` for the earner when its part is smaller than the amount.
 
-Everything the host's wallet gained between the start and the end of a passed story mission counts as the mission's
-reward, cash picked up during the mission included. This is upstream's measure of the reward.
+The reward of a story mission or of a joint side job is the money its own script pays the earner: the `ADD_SCORE`
+commands (opcode `0109`) the script runs for the local player, counted as they run (`NoteScriptPay` in
+`features/story/missions`). Money the script takes counts against it. Cash picked up meanwhile is no part of the reward
+and stays with the player who picked it up. A mission whose script pays nothing sends no reward: `coop.log` of the
+host then says `Mission reward: none`.
+
+Upstream measures the reward as everything the earner's wallet gained from the start to the end, pickups included;
+test builds 1 and 2 did the same. Checked against the game's `main.scm` and `script.img`: 72 story missions and every
+joint side job pay through `ADD_SCORE` in their own script; the early Los Santos missions that give respect alone
+have none.
 
 In `split` and `scaled` modes a player who joins a side job late shares only the money earned after joining. In `full`
 mode the late joiner still receives everything earned since the job began, as upstream.
 
 Unchanged: gifts between players (F2), pool stakes, contest winnings, and non-money completion rewards of side jobs
 (max health, armour, fireproof and the like), which every player still receives.
+
+## Name tags switch
+
+The names, health and armour bars over the other players could be turned off only by `name_tags = 0` in `[game]` of
+`coop\coop.ini`, read at the game's start. Test build 4 adds two switches that act at once and write the same key:
+
+- the `Name tags over players` checkbox of the F9 window, shown while connected, beside the mark colour;
+- `/names` in the chat (turns them over), `/names on`, `/names off`.
+
+The setting is each player's own: it changes what that player's game draws and is not sent to anyone. Source:
+`Players::SetNameTags` in `src/client/entities/player`.
 
 ## Server additions
 
@@ -278,6 +298,10 @@ ped's clump unchecked and crashed at `0x5E5815` reading address `0x2C`.
   whose clump has no animation makes no steps. `coop.log` says so the first five times.
 
 Found from a tester's `crash.log`; not reproduced by the author. Upstream has the same code.
+
+**Picked-up cash shared as a reward (test build 3).** See [Payouts](#payouts): the reward is now what the script pays,
+not what the wallet gained. Found in a tester's `coop.log`: `Mission reward: $21`, `$141` and `$58` after `drugs3`,
+`drugs1` and `music3`, three missions that pay no money.
 
 ## Release files
 
