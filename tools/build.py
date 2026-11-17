@@ -63,8 +63,9 @@ def glob(base, *patterns):
     return out
 
 
-# what ENet's unix.c asks its configure script: all of it is there on any Linux of this century
-ENET_UNIX = ["-DHAS_FCNTL=1", "-DHAS_POLL=1", "-DHAS_GETADDRINFO=1", "-DHAS_GETNAMEINFO=1", "-DHAS_INET_PTON=1",
+# what ENet's unix.c asks its configure script: all of it is there on any Linux of this century. _GNU_SOURCE: with
+# -std=c11 the system's headers declare the C standard alone, no getaddrinfo
+ENET_UNIX = ["-D_GNU_SOURCE", "-DHAS_FCNTL=1", "-DHAS_POLL=1", "-DHAS_GETADDRINFO=1", "-DHAS_GETNAMEINFO=1", "-DHAS_INET_PTON=1",
              "-DHAS_INET_NTOP=1", "-DHAS_MSGHDR_FLAGS=1", "-DHAS_SOCKLEN_T=1"]
 ENET = lib("enet", [f"third_party/enet/{f}.c" for f in
                     ("callbacks", "compress", "host", "list", "packet", "peer", "protocol", "unix" if LINUX else "win32")],

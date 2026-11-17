@@ -2564,6 +2564,10 @@ Hunter, Seasparrow и Rustler `CVehicle::FirePlaneGuns`: он стреляет `
 
 Форк: подписи над игроками (`name_tags`) включаются и выключаются в игре, галочкой в окне F9 и командой `/names`.
 
+Форк: сервер собирается и под Linux (`python tools/build.py` на Linux, задача `linux` в CI). Windows-части кода
+(`Util.cpp`, `Log.cpp`, `main.cpp` сервера, `NatTraversal.cpp`) получили Linux-половину под `#ifdef _WIN32`; UPnP,
+сигнальный канал и TURN в Linux-сборку не входят. Подробности: `docs/FORK.md`, раздел «Linux server».
+
 Напарник, подключившийся посреди миссии, получает её состояние заново (`G_RESYNC`).
 
 Враги, которые ненавидят игрока, нападают и на напарника (тип педа PLAYER1). Его смерть миссию не проваливает.

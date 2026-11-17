@@ -1,5 +1,6 @@
 #include "features/internet/Internet.h"
 
+#include <cstring>
 #include <random>
 
 #include "common/lib/log/Log.h"

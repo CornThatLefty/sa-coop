@@ -15,6 +15,7 @@ All players and the server must run the same fork build: the protocol version di
 - [Name tags switch](#name-tags-switch)
 - [Server additions](#server-additions)
 - [Dedicated mode](#dedicated-mode)
+- [Linux server](#linux-server)
 - [Tests without the game](#tests-without-the-game)
 - [Engine addresses added by the fork](#engine-addresses-added-by-the-fork)
 - [Fixes to inherited behaviour](#fixes-to-inherited-behaviour)
@@ -249,12 +250,64 @@ reload) is not built yet. Until it is, `dedicated = 1` is for server tests; game
 
 After `/restoreworld` the game id is kept: a backup from another game needs `/newgame` or `/acceptworld` instead.
 
+## Linux server
+
+`coop-server` builds and runs on x86-64 Linux. It is the same program as `coop-server.exe`: one `Server.cpp`, one
+protocol, the same `server.ini`, console commands and data files.
+
+```
+python tools/build.py              # build/release/bin/coop-server (g++ 12 or later; CC and CXX name another compiler)
+python tools/build.py testclient   # the headless player of tools/test_server.py
+python tools/build.py dist         # dist/coop-server-linux-x86_64.tar.gz
+```
+
+The `linux` job of `.github/workflows/build.yml` does all three on Ubuntu 22.04 with g++ 12, runs
+`tools/test_server.py` against the Linux binary, and keeps the archive as an artifact. A tagged release carries it as
+a fourth file. The C++ library is linked into the program, so it needs only glibc 2.35 or later (Ubuntu 22.04,
+Debian 12 and newer).
+
+The archive holds `coop-server`, `server.ini` with every key at its preset (`deploy/linux/server.ini` plus the
+`[balance]` section the server writes itself), `balance_exclude.ini`, the systemd unit `sa-coop.service` and
+`README.md` with the install steps, the port to open (7788/UDP) and the data folder's layout. Source: `deploy/linux`.
+
+**How the code is shared.** Each Windows-only piece has a Linux half behind `#ifdef _WIN32` in the same file:
+
+| Piece | File | Windows | Linux |
+| --- | --- | --- | --- |
+| UTF-8 and wide text | `common/lib/util/Util.cpp` | `MultiByteToWideChar` | A UTF-8 codec; `wchar_t` holds a whole code point |
+| Clock | same | `QueryPerformanceCounter` | `clock_gettime(CLOCK_MONOTONIC)` |
+| Files | same | `CreateFileW`, `MoveFileExW`, `FlushFileBuffers` | `open`, `rename`, `fsync` |
+| Lowercase | same | `CharLowerBuffW` | Latin, Latin-1 and Cyrillic by table |
+| Log file and time | `common/lib/log/Log.cpp` | `_wfopen`, `GetLocalTime`, UTF-8 BOM | `fopen`, `localtime_r`, no BOM |
+| Entry point | `server/app/entry/main.cpp` | `wmain`, console control handler, `ReadConsoleW`, `LOCALAPPDATA` fallback | `main`, `SIGINT` and `SIGTERM`, lines of stdin, exit with a message when the data folder cannot be written |
+| Sockets outside ENet | `common/api/nat-traversal/NatTraversal.cpp` | Winsock | BSD sockets |
+| ENet | `third_party/enet` | `win32.c` | `unix.c` |
+
+New in `Util.h` for both systems: `RemoveFile`, `RenameFile`, `CopyFileOver`, `SleepMs`, `NativePath`. `Server.cpp`
+calls these instead of `DeleteFileW`, `Sleep` and `std::filesystem`.
+
+**Paths (deviation from the spec).** The spec names `std::filesystem::path` for the server's paths. They stay
+`std::wstring` joined with backslashes (`world\world.b` after the data folder), and `NativePath` turns the
+backslashes into slashes at the system calls on Linux. `Server.cpp`'s path code is then one text for both systems
+and the Windows build's behaviour does not change. A file name cannot hold a backslash of its own: nicknames are
+sanitized to letters, digits and `_-.[]`.
+
+**Left out of the Linux build:** UPnP, the signalling channel, NAT hole punching and the TURN relay (WinHTTP and
+BCrypt code). They get a home computer through its router. `turn =` is ignored with a warning. **Kept:** STUN through
+the game socket and the invite code, written to `server-data/invite.txt`.
+
+**State.** Compiled and tested only in CI: the 22 server tests pass against the Linux binary there. No game has
+connected to it. `dedicated = 1` still waits for the client side (see [Dedicated mode](#dedicated-mode)); with
+`dedicated = 0` the first player in the game is the host, as on any server started outside the F9 window.
+
 ## Tests without the game
 
 ```
 python tools/build.py server testclient
 python tools/test_server.py
 ```
+
+The same two commands work on Linux, and CI runs them on both systems.
 
 `coop-test-client` (`tools/test-client`) is a headless player: it joins a server, prints each service message as a
 line and takes commands on stdin. `tools/test_server.py` starts a server per test in a temporary folder, bound to
@@ -305,8 +358,9 @@ not what the wallet gained. Found in a tester's `coop.log`: `Mission reward: $21
 
 ## Release files
 
-Upstream ships one archive of about 515 MB. `python tools/build.py dist` in the fork writes three files, and a tagged
-release carries all three:
+Upstream ships one archive of about 515 MB. `python tools/build.py dist` in the fork writes three files on Windows.
+A tagged release carries all three, and the Linux server's archive (`coop-server-linux-x86_64.tar.gz`,
+see [Linux server](#linux-server)) as a fourth:
 
 | File | Contents |
 | --- | --- |

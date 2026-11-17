@@ -1,8 +1,26 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 4: co-op balance (combat scaling, shop prices, split payouts),
-a crash fix, picked-up cash kept out of shared rewards, and a switch for the name tags over players.
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 5: co-op balance (combat scaling, shop prices, split payouts),
+server fixes (world backups, host choice, game id, password cooldown), and the server for Linux.
 
-It does not connect to upstream 0.3.4 (protocol 64). It plays with test builds 1 to 3, but each fix works only in the
-game of a player who has this build, so every player should install it.
+It does not connect to upstream 0.3.4 (protocol 64). It plays with test builds 1 to 4, but each fix works only in the
+game of a player who has this build, and the server fixes only on a host that has it, so every player should install it.
+
+## New since test build 4
+
+- **World backups.** Every world a new save replaces is kept on the host: `coop\server-data\world\world.b.1` (the
+  latest) to `world.b.10`. `/restoreworld` from the host lists them, `/restoreworld 2` brings one back for everyone.
+  To check: pass two missions, `/restoreworld`, then `/restoreworld 1`: every player reloads into the earlier world.
+- **Host leaves.** The host role goes to a player who is in the game with the current world, not to whoever connected
+  first, and a player waiting for the world is answered instead of waiting for a host that left.
+  To check: with three players, the host quits while one partner is still loading: that partner gets into the game.
+- **Profiles after a restart.** The server remembers which game its world belongs to (`world\game.id`), so partners
+  get that game's profiles on the first join after a server restart.
+  To check: restart the host's game and server, load the same save: partners have their money, weapons and stats.
+- **Password cooldown.** Five wrong passwords from an address make it wait 60 seconds, doubling up to an hour.
+- **Admins.** `admins =` and `admin_password =` in `[server]` of `coop\server.ini`, `/admin <password>`,
+  `/host <player>`. The host of a game started from the F9 window is an admin as before.
+- **Server for Linux.** `coop-server-linux-x86_64.tar.gz` in this release: the same server for a Linux machine, with
+  its settings, a systemd unit and install steps in its `README.md`. It passes the server's tests on Linux; no game
+  has connected to it yet. `dedicated = 1` is for server tests until the game's side of it is built.
 
 ## New since test build 3
 
@@ -36,6 +54,7 @@ game of a player who has this build, so every player should install it.
 | `SA-COOP.zip` | 6 MB | The mod: `coop.asi`, the server with its `server.ini`, the ASI loader, the animation packs. Every player needs it |
 | `SA-COOP-extras.zip` | 505 MB | Optional: skin packs for the F4 window and voices for a player in a skin. Unchanged from upstream 0.3.4 |
 | `coop.pdb` | 20 MB | Not for playing. Symbols for reading a `crash.log` of this build |
+| `coop-server-linux-x86_64.tar.gz` | 1 MB | Not for playing. The server for a Linux machine |
 
 Either every player installs the extras or none: a pack's skin is not shown to a player without the pack.
 
@@ -47,7 +66,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.4` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.5` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 
@@ -106,8 +125,9 @@ Combat (2 or more players in the game)
 
 ## Not in this build
 
-Dedicated Linux server, host migration, 10 players, contests for more than two, spawn distance settings, train boarding
-in missions, mission reinforcements.
+Hosting from a dedicated server in the game (the F9 window still starts its own server), host migration without a
+reload, 10 players, contests for more than two, spawn distance settings, train boarding in missions, mission
+reinforcements.
 
 ## Engine addresses
 
