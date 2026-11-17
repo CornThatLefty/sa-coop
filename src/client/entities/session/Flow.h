@@ -44,6 +44,10 @@ bool InHostWorld();
 // host: the game that starts now is the world a server standing on its own keeps (asked for on joining it), not a save
 // of this player's. True once per such load: the caller is the one that names the game to the server (features/progress).
 bool TakeHostServerWorld();
+// The host role moved (S_HOST_CHANGED). To this game, in the server's world it plays as a partner: a guest host from
+// here on. Called before the modules' OnHostChanged, which ask GuestHost().
+void OnHostChanged(uint8_t newHost);
+bool GuestHost();  // host, a guest in the world a server standing on its own keeps (loaded from it, or the role taken over)
 bool HostWorldWaiting();  // partner: the host's world after its progress waits to load (at the next mission's start point)
 bool HostWorldLoading();  // partner: and loads now (the screen going dark for it, or the load itself)
 // online and in the world both games share: the host always, a partner once it plays the host's world (before that

@@ -1,9 +1,29 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 11: the server's console and log, the settings files and the
-installer in English. Nothing in the game's behaviour changes from test build 10.
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 12: a promoted host keeps its character, a player's copy
+gets into a car with its owner, and the logs carry the game's memory.
 
-It connects to test builds 6 to 10 (protocol 65) and not to builds 1 to 5 or to upstream 0.3.4.
+It connects to test builds 6 to 11 (protocol 65) and not to builds 1 to 5 or to upstream 0.3.4. Both fixes need
+build 12 in every player's game. The server is unchanged.
 
-## New since test build 10
+## Fixed since test build 11
+
+- **Character lost after taking over as host.** On a standing server, the host left and a partner got the role.
+  From then on that partner's money, weapons, skills and clothes were no longer saved, and its next visit brought
+  back the character of the moment the role changed. A promoted partner now stays a guest host: its profile is
+  saved every 30 s when changed, as before the promotion.
+  To check: two players on a panel server; the host leaves; the other buys clothes, leaves and joins again.
+- **A player stood by a car that drove off, then appeared at the wheel.** After a get-in of more than 4 s (a jack, a
+  long walk to the door) the copy in the other game was put back on the street and kept out of the seat for 4 s
+  more. The copy now waits in the seat while its owner gets in.
+  To check: one player jacks a car with a driver while the other watches.
+
+## New since test build 11
+
+- **Memory in the logs.** `coop.log` has `Memory: N of N MB of address space free` at each game's start and as the
+  number moves, and names a `gta_sa.exe` limited to 2 GB. Under 150 MB free the chat says so once. Every record of
+  `crash.log` carries the same line, and a C++ exception carries its type. The freeze of 17.11 was such an
+  exception: Mod Loader's sound loader found no memory left (`std::bad_alloc`).
+
+## New in test build 11
 
 - **English outside the game's windows.** The server's console and `server.log`, the rest of `coop.log`, the
   comments of `server.ini` and `coop.ini`, `install.bat` and the guide in the archive (`Instructions.txt`, in place
@@ -168,7 +188,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.11` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.12` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 

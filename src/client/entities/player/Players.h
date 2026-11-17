@@ -38,6 +38,8 @@ struct RemotePlayer {
     int8_t enterSeat = -1;
     uint64_t enterAskedMs = 0;
     uint64_t exitTaskMs = 0;
+    uint16_t exitNetId = 0;     // the vehicle its owner's exit message named
+    uint64_t pulledOutMs = 0;   // the copy was warped out of a seat its owner is not in
     bool deadShown = false;     // the owner reported death and the local ped plays it
     uint64_t deadSinceMs = 0;   // the owner's state said dead (its death animation may come a moment later)
     int16_t dieAnim = -1;       // the default group's animation its player fell with (G_PLAYER_DEATH), and when
