@@ -181,7 +181,7 @@ void Server::SendSettings(Player& p) {
         Setting it;
         it.section = "balance";
         it.key = kBalanceKeys[i].name;
-        it.kind = i == BK_PAYOUT_MODE ? SK_CHOICE : SK_FLOAT;
+        it.kind = i == BK_PAYOUT_MODE ? SK_CHOICE : BalanceKeyIsFlag(i) ? SK_BOOL : SK_FLOAT;
         if (i == BK_PAYOUT_MODE) it.choices = "full,split,scaled";
         it.min = kBalanceKeys[i].min;
         it.max = kBalanceKeys[i].max;

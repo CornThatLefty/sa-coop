@@ -767,6 +767,11 @@ def settings_are_read_and_changed_from_the_game(make):
         check(near(p.balance()["price_weapons"], 4.5), f"{p.name}: the price")
     a.send("set balance payout_mode full")
     check(near(b.balance()["payout_mode"], 0), "the payout mode by its word")
+    a.send("settings")
+    check(settings_of(a)[1].get("balance.sync_driver_leads") == "1", "a switch of the balance shows as 1 or 0")
+    a.send("set balance sync_driver_leads 0")
+    check(near(b.balance()["sync_driver_leads"], 0), "the switch reaches every game")
+    check(re.search(r"(?m)^sync_driver_leads = 0", s.ini.read_text(encoding="utf-8")), "server.ini has the switch")
     text = s.ini.read_text(encoding="utf-8")
     check(re.search(r"(?m)^price_weapons = 4.5", text) and re.search(r"(?m)^payout_mode = full", text), "server.ini has the balance")
 

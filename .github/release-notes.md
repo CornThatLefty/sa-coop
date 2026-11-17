@@ -1,10 +1,28 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 7: anyone can host a standing server in turn. The host plays
-the server's shared world as its own character, and the world goes back to the server for the next host.
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 8: less lag for a player who is not the host. The driver's
+game makes the streets of a shared car, and a hit on another game's person shows at once.
 
-It plays with test build 6 (protocol 65) and does not connect to builds 1 to 5 or to upstream 0.3.4. The new
-behaviour works in the game of a player who has this build; the server needs it for `backup_minutes`.
+It plays with test builds 6 and 7 (protocol 65) and does not connect to builds 1 to 5 or to upstream 0.3.4. Every
+player and the server should have this build: in a car shared with a player on an older build both games make
+people and traffic.
 
-## New since test build 6
+## New since test build 7
+
+- **The driver's game makes the streets.** In a car two players share, the passers-by and traffic are made by the
+  game of the player at the wheel, so what the driver runs into is its own and answers at once. Not during the
+  host's story mission. Switch: `sync_driver_leads` (F8, Combat tab).
+  To check: a partner drives with the host as a passenger for a block or two, then runs people over: they fall and
+  die with no delay in the partner's game. `coop.log` of both says `A car shared with another player`.
+- **Hits on other games' people show at once.** A shot, a blow or a car hit on a person the other game owns is
+  applied in the hitting player's game right away. A passer-by also dies there at once when the hit kills it
+  clearly; a mission's people still die when their owner's game says so. Switch: `sync_instant_hits`.
+  To check: a partner near the host shoots a passer-by the host's game made: it reacts and dies with no delay, its
+  money falls in the partner's game, and the partner's kill count rises by one. A wounded passer-by that survives
+  in the host's game after dying in the partner's stands up again there after about two seconds: worth a report
+  with both `coop.log` files.
+
+Both are new ground and were not run in a game. Either switch set to 0 in F8 gives the earlier behaviour.
+
+## New in test build 7
 
 - **The host's own character on a standing server.** A player who joins an empty Linux or panel server gets the
   host role, loads the server's world, and plays it with its own money, weapons, skills and look, saved on the
@@ -101,7 +119,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.7` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.8` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 

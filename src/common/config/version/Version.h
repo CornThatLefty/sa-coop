@@ -2,7 +2,7 @@
 
 #define COOP_NAME "SA:COOP"
 // tools/build.py gives the version resource its numbers from the digits; "-fork.N" names the fork's test build
-#define COOP_VERSION_STR "0.3.4-fork.7"
+#define COOP_VERSION_STR "0.3.4-fork.8"
 
 #ifndef RC_INVOKED  // the resource compiler reads only the macros above (VersionInfo.rc)
 #include <cstdint>

@@ -33,6 +33,7 @@ bool ParseValue(int key, const std::string& text, float& out) {
 
 std::string ShowValue(int key, float v) {
     if (key == BK_PAYOUT_MODE) return v < 0.5f ? "full" : v < 1.5f ? "split" : "scaled";
+    if (BalanceKeyIsFlag(key)) return v >= 0.5f ? "1" : "0";
     std::string s = Format("%.3f", v);
     while (s.back() == '0') s.pop_back();
     if (s.back() == '.') s += '0';
@@ -151,7 +152,11 @@ void WriteBalanceDefaults(const std::wstring& serverIni) {
             "; Mission and joint job rewards. full: every player gets the whole amount. split: the amount divided by the\r\n"
             "; number of players paid. scaled: every player gets the amount x payout_share.\r\n"
             "payout_mode = split\r\n"
-            "payout_share = 0.5\r\n";
+            "payout_share = 0.5\r\n"
+            "; In a car two players share, the driver's game makes the people and traffic around it (1) or the host's does (0).\r\n"
+            "sync_driver_leads = 1\r\n"
+            "; A player's hit on a person of another player's game shows in its own game at once (1) or when that game answers (0).\r\n"
+            "sync_instant_hits = 1\r\n";
         if (WriteFileBytes(serverIni, text.data(), text.size())) LOGI("server.ini: the [balance] section added with its presets");
     }
     std::wstring exclude = BalanceExcludePath(serverIni);

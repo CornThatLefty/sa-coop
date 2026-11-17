@@ -15,6 +15,7 @@ All players and the server must run the same fork build: the protocol version di
 - [Player options in the F2 window](#player-options-in-the-f2-window)
 - [Server settings window (F8)](#server-settings-window-f8)
 - [Host of a standing server plays its world](#host-of-a-standing-server-plays-its-world)
+- [Ownership of people and cars](#ownership-of-people-and-cars)
 - [Server additions](#server-additions)
 - [Dedicated mode](#dedicated-mode)
 - [Linux server](#linux-server)
@@ -63,6 +64,8 @@ player in the menu or loading is not counted. For a story mission's people, `n` 
 | `price_carmods` | 1.5 | 1.0 | 0.01–1000 | Mod shop parts |
 | `payout_mode` | `split` | `full` | `full`, `split`, `scaled` | How a reward is shared, see [Payouts](#payouts) |
 | `payout_share` | 0.5 | 1.0 | 0–1 | Each player's part of the amount in `scaled` mode |
+| `sync_driver_leads` | 1 | 0 | 0 or 1 | In a car two players share, the driver's game makes the people and traffic. See [Ownership](#ownership-of-people-and-cars) |
+| `sync_instant_hits` | 1 | 0 | 0 or 1 | A player's hit on another game's person shows in its own game at once |
 
 "Preset" is what the server uses when `server.ini` does not set the key. "Neutral" is the unmodified game.
 
@@ -271,6 +274,53 @@ Limits, all part of the anyone-can-host work still to do:
 
 Source: `OnOnline`, `OnWorldReceived`, `Leave`, `Update` in `src/client/entities/session/Flow.cpp`; `ProfilePlayer` in
 `src/client/features/progress/Progress.cpp`.
+
+## Ownership of people and cars
+
+Every game simulates the people and cars it owns and shows the others' as copies. A copy answers a hit one ping
+after it lands, because its owner's game decides the harm. Upstream's rules, as read from the code:
+
+- The game that created a person or a car owns it.
+- Within 60 m of the host only the host's game makes passers-by, traffic and parked cars (90 m to switch back), unless
+  the partner is wanted. A partner near the host sees copies only.
+- The player at the wheel owns the car from the first frame. A passenger never does.
+- A person changes owner only when its owner gives it away: an off-screen passer-by much nearer the other player,
+  people through a door, police to a wanted player. Nothing changes owner on a hit.
+- A story mission's people and cars stay the host's.
+
+The fork changes this in steps. Step 1 is test build 8; both parts are switches in `[balance]` of `server.ini` (and
+checkboxes on the Combat tab of F8), sent to every game so that all follow one rule.
+
+**`sync_driver_leads`: the driver's game makes the streets.** In a car two players share, the game of the player at
+the wheel makes the passers-by, traffic and parked cars, and the other games near it make none. The driver is the
+one who meets them: with the host as a passenger everything the driver ran into was the host's copy. Not during the
+host's story mission (its streets are its script's) and not while a joint side job leads (its leader's, as before).
+People and cars made before the ride keep their owner until they are left behind. Every game in the car needs this
+build: a game without it keeps making its own, and the street holds two games' people while the ride lasts.
+`SharedCarDriver`, `UpdateSuppression` in `src/client/features/population/Population.cpp`.
+
+**`sync_instant_hits`: a hit on a copy shows at once.** The owner's game still decides health, death, the kill's
+credit and the crime. In the hitting player's game the copy now also takes the hit as the game applies it:
+
+| Copy | Shot, blow or blast | Car |
+| --- | --- | --- |
+| Any, on foot | The game's own reaction to the hit; health put back after it | Knocked down (as before) |
+| A passer-by (no script's person) with health under 250 | Also dies when the hit exceeds its health by 3, counting the least damage its owner can make of it | Also dies when the hit exceeds its health by 10 |
+| In a vehicle | As before: shows when its owner answers | As before |
+
+A copy killed this way is a guess that its owner's game confirms a ping later. Its body stays where it fell in the
+hitter's game (it is not moved to where its owner's lies), its loot falls there, and the kill is credited once, by
+the owner's `KILLED_BY_YOU`. If the owner's person lives on after 1.5 s of the guess, the copy is made again. A
+script's person (`X_SCRIPT` in the ped state's `extra` byte, set by its owner) is never guessed dead: a mission's
+people have proofs and health the copy does not know. `HitCopyHere`, `HookKillPedWithCar`, `HookRegisterKill` in
+`src/client/features/damage/Damage.cpp`; `predictedMs` in `src/client/entities/ped/Peds.{h,cpp}`.
+
+Not run in a game by the author: whether a copy plays the game's flinch for a non-lethal shot depends on the
+engine's damage response for a person with the copies' empty decision maker, which was not checked.
+
+Planned next: a person changing owner in place (the same person and number, only the owner changes) with a claim by
+the last player to hit it, then a claim by the nearest player as the weakest rule, with a margin and a hold so that
+people do not flip between two players standing together.
 
 ## Server additions
 
