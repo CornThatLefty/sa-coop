@@ -35,6 +35,11 @@ enum BalanceKey : uint8_t {
     // same rule (docs/FORK.md, "Ownership")
     BK_SYNC_DRIVER_LEADS,  // in a car two players share, the driver's game makes the people and traffic around it
     BK_SYNC_INSTANT_HITS,  // a player's hit on another game's person shows in its own game at once
+    // The streets (docs/FORK.md, "Wider streets"). The same in every game: the games share their people and cars by
+    // distances that follow from the engine's.
+    BK_SPAWN_SCALE,  // how many times farther out the engine makes and removes its people and traffic
+    BK_PED_DENSITY,  // people on the streets
+    BK_CAR_DENSITY,  // traffic
     BK_COUNT
 };
 
@@ -70,6 +75,10 @@ inline constexpr BalanceKeyInfo kBalanceKeys[BK_COUNT] = {
     {"payout_share", 1.0f, 0.5f, 0.0f, 1.0f},
     {"sync_driver_leads", 0.0f, 1.0f, 0.0f, 1.0f},
     {"sync_instant_hits", 0.0f, 1.0f, 0.0f, 1.0f},
+    // past 2 the cars would be made beyond the road nodes the game keeps loaded around its player
+    {"spawn_scale", 1.0f, 1.0f, 1.0f, 2.0f},
+    {"ped_density", 1.0f, 1.0f, 0.0f, 4.0f},
+    {"car_density", 1.0f, 1.0f, 0.0f, 4.0f},
 };
 
 // a key that is a switch: 0 or 1 in server.ini, a checkbox in the F8 window

@@ -47,6 +47,9 @@ public:
     // in this session (0: none yet)
     const proto::Balance& Balance() const { return m_balance; }
     uint32_t BalanceRevision() const { return m_balanceRevision; }
+    // The server's spawn_scale: how many times farther out the engine makes and removes its people and traffic
+    // (features/balance/Streets.cpp). Every distance of the mod that follows from the engine's is multiplied by it.
+    float SpawnScale() const { return Online() && m_balanceRevision ? m_balance.Get(proto::BK_SPAWN_SCALE) : 1.0f; }
     // The server's settings as it sent them last (S_SETTINGS; empty until asked for), for the F8 window. Revision: counts
     // the ones received in this session. A change goes out one setting at a time and comes back in a new S_SETTINGS.
     const proto::Settings& ServerSettings() const { return m_settings; }

@@ -1058,7 +1058,7 @@ bool PlayerInSeat(CVehicle* v, int seat, bool beforeUs) {
 // from it, where it has none of it (FarFromUs keeps it out of the pools), and the other partner there lost its street
 // (10.11 audit). Each game reckons it alike from the last states.
 bool WeInherit(uint8_t leaving) {
-    constexpr float kNear = 250.0f;  // the leaving game's people and cars stand within ~220 m of its player
+    const float kNear = 250.0f * Net().SpawnScale();  // the leaving game's people and cars stand within ~220 m of its player (x spawn_scale)
     LeftAt at;
     if (const RemotePlayer* rp = Players::Instance().Get(leaving); rp && rp->hasState) at = {true, rp->state.pos, rp->state.area};
     else if (auto it = g_leftAt.find(leaving); it != g_leftAt.end()) at = it->second;

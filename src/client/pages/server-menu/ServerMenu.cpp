@@ -27,7 +27,7 @@ using w::kSaBlue, w::kSaMuted, w::kSaLine;
 constexpr uint32_t kText = 0xFFE6E9EF;
 
 bool g_visible = false;
-int g_tab = 0;                                // 0 the server, 1 combat, 2 economy
+int g_tab = 0;                                // 0 the server, 1 combat, 2 economy, 3 streets
 uint32_t g_seenRevision = 0;
 std::map<std::string, std::wstring> g_edit;   // the text boxes, by key
 std::map<std::string, std::string> g_known;   // and the server's value each one was filled from
@@ -71,12 +71,17 @@ std::string NameOf(const Setting& s) {
     if (k == "payout_share") return TR("Доля при scaled", "Share in scaled mode");
     if (k == "sync_driver_leads") return TR("Прохожих и трафик создаёт игра водителя", "Driver's game spawns people and traffic");
     if (k == "sync_instant_hits") return TR("Попадания по чужим людям видны сразу", "Hits on other games' people show at once");
+    if (k == "spawn_scale") return TR("Дальность людей и машин", "People and traffic range");
+    if (k == "ped_density") return TR("Плотность людей", "People density");
+    if (k == "car_density") return TR("Плотность машин", "Traffic density");
     return k;
 }
 
-// the tab a setting is on: the server's own, the fight (health, damage, accuracy, gangs, missions), the money
+// the tab a setting is on: the server's own, the fight (health, damage, accuracy, gangs, missions), the money, the
+// streets (how far out and how many)
 int TabOf(const Setting& s) {
     if (s.section != "balance") return 0;
+    if (s.key == "spawn_scale" || s.key == "ped_density" || s.key == "car_density") return 3;
     return s.key.rfind("price_", 0) == 0 || s.key.rfind("payout_", 0) == 0 ? 2 : 1;
 }
 
@@ -180,9 +185,9 @@ void RenderServerMenu() {
     g.Text(FONT_SMALL, cx + cw, cy + (mh - sh) * 0.5f, net.ServerName(), kSaMuted, TEXT_RIGHT | TEXT_SHADOW);
     cy += mh + 14 * s;
 
-    const char* tabs[] = {TR("Сервер", "Server"), TR("Бой", "Combat"), TR("Деньги", "Economy")};
+    const char* tabs[] = {TR("Сервер", "Server"), TR("Бой", "Combat"), TR("Деньги", "Economy"), TR("Улицы", "Streets")};
     float tx = cx;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         float tw = g.TextWidth(FONT_MENU_SMALL, tabs[i]) + 36 * s;
         if (w::Tab(tabs[i], tx, cy, tw, rowH, tabs[i], g_tab == i, true)) g_tab = i;
         tx += tw + 8 * s;
