@@ -239,7 +239,7 @@ Rockstar Games Launcher, downgrade it to 1.0 US first, for example with GTA SA D
 3. Start the game. The SA:COOP window opens in the main menu, and later you can bring it up with F9. Enter your
    nickname. To switch the window to English, click EN at the top of it.
 
-The archive also contains a detailed player guide in Russian, `Инструкция.txt`.
+The archive also contains a detailed player guide, `Instructions.txt`.
 
 To update, unpack the new archive over the old files. Your settings and the partners' progress stay, and you don't
 need to run `install.bat` again. All players need to update: different versions of the mod do not connect to each

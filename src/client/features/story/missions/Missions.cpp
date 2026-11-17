@@ -339,7 +339,7 @@ bool SideJob(const std::string& name) {
 }
 // the stadiums' events and races, in arenas of their own (areas 14 Kickstart, 15 Blood Ring, 7 8-Track, 4 Dirt Track)
 bool StadiumJob(const std::string& name) { return name == "kicksta" || name == "blood" || name == "cprace"; }
-// What the call and its notices name it: "зовёт вас на совместное задание в такси" (to), "конец совместной гонки"
+// What the call and its notices name it: "invites you to a joint taxi job" (to), "end of the joint race"
 // (of). Picked when shown: the language can be switched in the connect menu.
 struct JobNames {
     const char *to, *of;
@@ -808,7 +808,7 @@ void RestoreOwnLook(bool evenDriving = false) {
 }
 
 // Joined a burglary: the balaclava its owner's BURGJB puts on its own player, worn over our own look as a host's mission
-// dresses us (28.10: "не надевается маска"), and our own look again after it
+// dresses us (28.10: "the mask does not go on"), and our own look again after it
 bool g_burglaryDressed = false;
 void BurglaryLook(bool on) {
     if (on == g_burglaryDressed || !core::IsPlayerReady()) return;
@@ -3299,7 +3299,7 @@ std::vector<Marked> g_sentMarked;            // host
 std::map<uint8_t, std::pair<Marked, int>> g_placed;  // partner: slot -> what and its script handle
 // STUNT turns each of its rings 10 degrees a frame (SET_CHECKPOINT_HEADING, the only script that does): every update
 // of the host's then had a new direction, and the partner's ring was made anew four times a second, its spin in jumps
-// (29.10: "анимация колец подлагивает"). A placed one that only turned stays, and turns here as there.
+// (29.10: "the rings' animation lags a bit"). A placed one that only turned stays, and turns here as there.
 std::map<uint8_t, float> g_turning;  // partner: slot -> its heading here
 bool SamePlace(const Marked& a, const Marked& b) {
     return a.slot == b.slot && a.type == b.type && (a.pos - b.pos).Length() < 0.05f && std::fabs(a.size - b.size) < 0.01f;

@@ -19,7 +19,7 @@ namespace coop::server {
 struct Config {
     std::string name = "SA:COOP server";
     std::string password;
-    std::string motd = "Добро пожаловать! Чтобы увидеть список команд, напишите /help.";
+    std::string motd = "Chat commands: /help.";
     bool friendlyFire = false;  // the players can hurt each other
     bool partnerTeleport = true;  // the partners may use /tp and /tphere
     bool sharedLife = false;      // a partner's death fails the host's story mission
@@ -108,7 +108,8 @@ private:
     void SendChat(Player* to, uint8_t fromId, uint32_t rgba, const std::string& text, const std::string& en = {});
     void Broadcast(uint8_t channel, const Writer& w, int exceptId = -1);
     void Kick(Player& p, const std::string& reason, const std::string& reasonEn = {});
-    void Leave(Player& p, proto::LeaveReason why, const std::string& reason = {});  // frees the slot, tells the others
+    // frees the slot, tells the others; a kick's reason in both languages (reasonEn empty: one text for both)
+    void Leave(Player& p, proto::LeaveReason why, const std::string& reason = {}, const std::string& reasonEn = {});
     void EnsureHost();
     void SetHost(Player& p);  // the role goes to p: everyone is told, a game behind the stored world gets it first
     Player* Host();

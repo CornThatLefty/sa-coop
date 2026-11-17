@@ -1,0 +1,411 @@
+SA:COOP: playing together
+=========================
+
+The host leads the story: the game runs on the host's save. The host starts a server and sends
+a friend the code. The friend joins with that code; the friend's money, skills and look are kept
+apart. Players can be in different homes and with different providers. Hamachi and Radmin are
+not needed.
+
+
+1. INSTALLATION (both players)
+------------------------------
+  1) The game needed is GTA San Andreas 1.0 US, clean or a build with mods. A game from Steam or the
+     Rockstar Games Launcher is downgraded to 1.0 US with GTA SA Downgrader. On a wrong
+     version the mod says so at start.
+  2) The SA-COOP archive is unpacked into the game folder, where gta_sa.exe is. Beside it
+     then: coop.asi, install.bat and the coop folder.
+  3) install.bat is run. In a clean game it installs the plugin loader; in a build that has a
+     loader already it changes nothing.
+  4) The game is started. The SA:COOP window opens in the main menu; later the F9 key opens
+     it. The nickname is entered there.
+  5) When the host starts a game, the mod checks Windows Firewall. If the firewall would keep
+     friends from the server, Windows asks whether to allow changes on this computer. "Yes"
+     lets the mod allow coop-server.exe on all networks. Without it the friend sees "The server
+     does not answer".
+  6) If an antivirus deleted coop.asi or coop-server.exe: the game folder goes into the
+     antivirus exclusions and the archive is unpacked again. The mod hooks into the game and
+     starts the server itself, which some antivirus programs dislike. It holds no viruses; its
+     source code is open on GitHub.
+
+  The host's and the friend's builds may differ. The host may play a build with mods while the
+  friend has a clean game. Mission texts appear in the language of each player's own game. If
+  the host's world still does not load for the friend, the friend needs the same build. The
+  simplest way: the host packs the game folder into an archive and sends it.
+
+  Mods through modloader work. Models, textures and effects are each player's own. A car a mod
+  adds under a new number is seen only by players who have that mod. CLEO, SilentPatch,
+  fastman92's limit adjuster and the first-person mod (BoPoH, First Person Mod 3.0) with its
+  skins work. When SA-MP starts the game, the mod turns itself off and stays out of its way.
+
+  The SA:COOP window, the chat and the hints are in Russian and English. The language switch is
+  at the top of the F9 window, at RU and EN. Each player picks a language.
+
+
+2. HOST: STARTING A GAME
+------------------------
+  1) In the F9 window, on the "Host a game" tab, a save is picked and "Start the server"
+     pressed. In a running game the server starts from the current game.
+     The arrows beside the password set the number of players: 2, 3 or 4.
+     The "Friendly fire" box above the button lets players hurt and kill each other: with
+     bullets, fists, explosions, fire and cars. Without it players cannot hurt each other. The
+     host's choice holds for the whole game until the server restarts.
+     The "No /tp and /tphere for partners" box turns those commands off for partners.
+     The "No cheat codes for partners" box turns every cheat code off for partners.
+     The "Shared life" box: with it, the death of any player fails the host's story mission.
+     Without it a dead player stands up beside the nearest friend after a couple of seconds,
+     and the mission goes on. It fails only when everyone is dead.
+  2) After a few seconds the window shows a code like XXXX-XXXX-XXXX. "Copy" copies it, and it
+     is sent to the friend through Telegram, Discord or anything else.
+  3) The code changes at every server start, so each time a fresh one is sent.
+  4) Saving works as usual. The friend's progress is kept in the host's coop\server-data
+     folder, or in %LOCALAPPDATA%\SA-COOP\server-data when the game is in Program Files. That
+     folder must not be deleted. A host's save saves the friend's progress as well. Loading a
+     save gives the friend the weapons the friend had at that save.
+  5) For the story from the very start, "New game" (the last item) is picked with the arrows
+     in the "Save" field.
+     The host plays the prologue alone; the friend joins at once, waits, and appears nearby
+     when CJ gets on the bike. The friend's money, weapons, skills and look in the new game
+     start from zero too. Back at the old save, the friend has everything earned in that game.
+
+
+3. FRIEND: JOINING
+------------------
+  1) In the F9 window, on the "Join a game" tab, the host's code is pasted with "Paste" (or
+     Ctrl+V in the code field) and "Connect" pressed. The port stays as it is when joining by
+     code.
+  2) Connecting takes up to 20 seconds. Then the host's world loads.
+  3) The first time, the friend's skills are the host's at the moment of joining, and the look
+     is the friend's own: CJ from the friend's game or, when joining from the menu, from the
+     friend's last save. From then on the friend levels up alone, and all of it stays the
+     friend's.
+  4) When the host starts a new game, the window says "The host plays the prologue". The friend
+     waits. When CJ gets on the bike, the friend appears beside him, with a bike nearby. When
+     the host gets off the bike, the friend has a few seconds of loading: that is the move into
+     the host's world.
+
+
+4. WHEN THE FRIEND CANNOT JOIN
+------------------------------
+  With some providers, mobile internet above all, a direct connection does not get through.
+  Then the host turns on a relay, and joining works over any internet.
+
+  Way A. The metered.ca relay (20 GB a month free, enough for hundreds of hours of play)
+    1) The host signs up at https://www.metered.ca (by e-mail or Google) and opens the TURN
+       Server section.
+    2) The host creates an App with any name in Latin letters, e.g. sacoop-ivan. The app's
+       address looks like sacoop-ivan.metered.live, and its name is the first part of the
+       address.
+    3) The host copies the API Key. It is in the dashboard, under Developers / API Key or
+       TURN Server > Credentials.
+    4) The host opens coop\server.ini in Notepad (it appears after the server's first start)
+       and writes the app's name and the key on the last line:
+         turn = metered:sacoop-ivan:API_KEY
+    5) In the game the host presses F9, "Disconnect", then "Start the server" again, and sends
+       the friend the new code.
+    The friend changes nothing. If the direct connection fails, the game switches to the relay
+    by itself after about four seconds.
+
+  Way B. A playit.gg tunnel (when metered.ca cannot be reached)
+    1) The host downloads the program from https://playit.gg/download, runs it and signs in.
+    2) The host creates a UDP tunnel to local port 7788. The result is an address like
+       something.ply.gg and a port.
+    3) The host starts the server in the game as usual. The playit program keeps running
+       meanwhile.
+    4) The friend enters the address from playit (without the port) in the "Invite code or IP
+       address" field and the port in the "Port" field, then presses "Connect".
+
+  Way C. With a public ("white") IP on the host's side and UPnP on in the router, everything
+    works as it is. With UPnP off, port 7788 (UDP) is forwarded to the host's computer.
+
+
+5. IN THE GAME
+--------------
+  F9     the SA:COOP window
+  T      chat (Enter sends the message). While the chat is open, the player stands and does
+         not jump
+  B      voice chat while the key is held (the mode is set in the F9 window)
+  G      enter a nearby car as a passenger (best the partner's) through the nearest door
+  Triangle on a gamepad, held half a second: enter as a passenger
+  Y, N   yes or no to the question in the middle of the screen. On a gamepad: d-pad right or left
+  F2     players: their money, giving money and weapons
+  U      animations: emotions, poses, actions, dances and animations for two with the partner
+  F4     skins: the game's ordinary people, packs and own skins
+  F7     hide the interface (radar, money, weapon, stars, chat and name tags) and show it again
+  RMB    in a car with a weapon: lean out and aim (LMB fires)
+  /tp    chat command: asks permission to move to the partner
+  /tphere  chat command: calls the partner over
+  /anims  chat command: /anims with a number plays an animation, /anims alone opens the window
+
+  With more than two players, the player's number follows the command: /tp 2, /tphere 3. The
+  numbers are in the F2 window.
+  The partner answers /tp and /tphere with Y (yes) or N (no), and the move happens only after
+  a yes. /tp does not lead into a building, and /tphere calls nobody out of one.
+
+  The T, G, F2 and B keys are changed in the F9 window, "Keys" button. The microphone mode is
+  picked there too: while the key is held, on and off by a press, always on, or off.
+
+  The F2 window shows each player's money. The $ button in a friend's row gives the friend
+  money: an amount, then "Give". The pistol button gives a weapon: the weapon is picked with
+  the arrows, the ammo count entered, then "Give". If the friend has another weapon in that
+  slot (e.g. an AK-47 given, an M4 held), the weapon comes back to the giver.
+  With more than two players, a friend's row has two arrow buttons: the right arrow asks
+  permission to move to that friend, as /tp, and the left arrow calls the friend over, as
+  /tphere. The same F2 key or Esc closes the window.
+
+  In the U window the picked animation plays at once on a copy of the player's CJ on the
+  right. "Play", Enter or a double click starts it. Poses, stances, dances and sitting last
+  until Space or F. Any movement stops a short animation. The number left of the name works
+  with the /anims command. The tabs hold the basic animations of SA-MP RP servers: sit, lie,
+  smoke, eat, phone, gestures. Smoking, drinking, eating, talking on the phone and filming put
+  a cigarette, bottle, can, burger, phone or camera in CJ's hand. Animations for two
+  (handshake, gang greeting and others) work when the partner stands nearby: the partner gets
+  an invitation and answers with Y or N. Own animations from .ifp files (e.g. dance packs) go
+  into the coop\anims folder before the game starts. They appear in the "Own" tab, and the
+  partner sees them when the partner has the same file.
+
+  The "Packs" tab holds other authors' animations the mod brings: dances, stunts and gestures.
+  They are in the coop\packs folder, load separately and replace nothing in the game.
+  Animation authors: "Salute" KOT33, the greeting from GTA V Alexander (Skone Modding), rap
+  Aleksey_Move, poses Androsz and mrandres5555, poses on the ground Ruslan Konorov, actions
+  from GTA LCS Mystertv and Junior_Djjr, disco dances GRAF MC, party dances ATField02_GR,
+  breakdance and stunts Arch, acrobatics Spirit, parkour Paul_Cortez.
+
+  While a player types in the chat, CJ gestures briefly, as in a conversation.
+
+  The F4 window picks a skin in place of CJ. The tabs hold the game's ordinary people (men,
+  women, gangs, services), skin packs and own skins. The picked skin shows at once on the
+  right and turns with the mouse. "Wear", Enter or a double click puts it on, and "CJ again"
+  brings back CJ in his clothes. The skin changes only on foot and outside cutscenes. All
+  players see it, and it stays after loading a save and in cutscenes: in every game the host
+  plays CJ's role in the host's skin, moving the lips while CJ talks, and the partners stand
+  nearby in theirs. Own skins go into the coop\skins folder as pairs of
+  .dff and .txd files with one name, e.g. myskin.dff and myskin.txd. Another player sees such
+  a skin when that player has the same files. Without them that player sees the game's
+  ordinary person of that name, or CJ when there is none.
+  In a skin the character speaks with that person's voice and walks that person's walk. For an
+  own skin, the voice and walk come from that person's line of the game's peds.ide, placed in
+  the file coop\skins\peds.ide. Without it, a skin named after a person of the game takes that
+  person's voice and walk, and the rest take male ones.
+  In cutscenes and story dialogue a hero in a skin has a voice of the skin's own, female or
+  male, and the name CJ is heard neither in speech nor in subtitles. These voices are in the
+  coop\voices folder. Without it CJ's voice plays.
+  The mod brings the skin packs; they are in the coop\skinpacks folder and replace nothing in
+  the game.
+  In the fork's builds the coop\skinpacks and coop\voices folders come in a separate archive,
+  SA-COOP-extras.zip: it is unpacked into the game folder like the main one. Without it the mod
+  works, without those skins and voices.
+  Skin authors: the Families, Ballas, Vagos and Aztecas gangs CemeteryBlunts (with materials by
+  Endochronic, Cleon77, INNOCENT KILLAZ, Flaqko, Vados, Qube, Thiago555aug and Junior_Djjr),
+  passers-by cut from the game Jéssica Natália, Junior_Djjr and falsenail, beta passers-by
+  Camel, Shiro_Mori, Babaika, Felo23, lk_1997_kl, Pobeda1945X2, Artur$MD, Cleoude and badboy_zay
+  (collected by Elmos), the San Fierro Rifa and Da Nang Boys gangs, the triads, the Italian and
+  Russian mafia and Angels of Death MC wizvich (with materials by CemeteryBlunts, SlingShot753,
+  TylerNixon, DannyMODS, OgGato, DanXVII, MinnieMan121249, Persh, Stacks, Exocemetry and
+  Thiago555aug).
+
+  In the Shamal and other planes without passenger seats, and in helicopters and boats with no
+  seat left, the G key puts a player on board with the partner at the controls. On a boat the
+  player sits on its seats. The camera key gives the weapon's view: the player stands up and
+  can shoot. In a plane the first one sits beside the pilot. The enter-car key gets off: out
+  of a plane beside it, and in the air with a parachute.
+
+  The host starts story missions, and a mission begins when everyone is in the marker. The
+  host sees who is awaited and can start at once with Y: the ones behind are moved to the
+  host. When the friend reaches the marker first, the host gets an invitation and is beside
+  the friend at once on Y. The friend sees the same objectives, markers and cutscenes, hears
+  the host's lines and phone calls when nearby, and gets the same reward. In cutscenes the
+  friend's character stands at CJ's side, and when CJ walks off, follows at a walk without
+  jumping from place to place between shots. The character looks at whoever speaks, nods,
+  shifts from foot to foot, glances at the watch and chews gum. Enemies attack both players,
+  and either can hurt them. Shops, food, the gym, the barber, tattoos and tuning are each
+  player's own, but the other player sees the partner eat, work out or get a haircut.
+  Driving, motorbike, bicycle and flying skills are shared: both have the better of the two.
+  The stats in the pause menu are shared too.
+
+  When the host reaches a mission's goal and the friend is still on the way (within 300 m of
+  it), the mission waits up to 45 seconds for the friend. A mission with a timer running does
+  not wait. In Toreno's desert missions the friend gets into a plane or helicopter of the
+  friend's own at once when the host's vehicle has no room, and gets a jetpack of the friend's
+  own when the host puts on the host's. In Zero's missions the friend gets a machine gun beside
+  the host's turret or an RC toy: a plane or helicopter with a machine gun that downs the same
+  targets. In "New Model Army" the friend's helicopter has a magnet: the fire button picks up
+  and drops barrels and planks. The enter-car key brings the friend back to the friend's CJ.
+  A friend far from Zero's shop gets the toy at its door. When the host shoots from a
+  helicopter or car, as in "The Da Nang Thang", the friend shoots nearby from the other side
+  with the same weapon. The enter-car key takes the friend off.
+
+  Mission scenes on the game's engine, with bars above and below, are seen by a friend near the
+  host through the host's camera. In the lowrider contest and the beach dance the friend plays
+  beside the host, and the friend's points go into the shared score. In the house robbery with
+  Ryder either player can carry the crates and load them into the van: the enter-car button
+  lifts a crate.
+
+  When the host passes a mission, the new story progress (opened areas, gyms) reaches the
+  friend with a short loading. It begins when the friend steps into the next mission's marker,
+  or after 10 minutes when there is no mission. After it the friend stays at the same place,
+  with the same weapons, money and skills, and the friend's car stands nearby again.
+
+  Side jobs (taxi, paramedic, firefighter, vigilante), races, stadiums, schools, the shooting
+  range and freight runs are played by each player in that player's own game. A side job in a
+  vehicle is started by the driver. The friend can play them while the host has no mission
+  running. Their money and skills stay with the friend. But an activity the story needs, such
+  as the driving school, is passed by the host.
+  Both can go to a school at once: during the lesson the friend's car is hidden and does not
+  get in the way.
+  A side job or race can be played by two: Y in the first 20 seconds after its start sends the
+  second player an invitation. The game moves the one who accepts to the one who invited. In
+  the robbery van and the truck that player rides as a passenger; in the taxi, ambulance, fire
+  truck and police car, in races, on a bicycle, motorbike and at the pimp job that player gets
+  the same vehicle nearby. On side jobs both work: patients get into either player's
+  ambulance, the pimp's girl gets into the car of whoever reached her first, both put out fires
+  and catch criminals, and all of it counts toward the joint job. In a burglary the houses are
+  open to both: a thing the second player carried out and put at the van's back doors (F) goes
+  into the shared loot. Each player has a noise bar, and the owners wake up from either
+  player's noise. A taxi always has one fare, so each player drives their own: the second
+  player's taxi job starts by itself, and both get the money for every fare. The second player
+  gets fares of their own after driving away from the first. The export list at the docks is
+  shared: a car delivered by one is crossed off for both, and both get its money. A side job or
+  challenge passed by one counts for both, with its reward. Taxi fares, stolen goods, truck
+  runs and quarry jobs count as shared toward the rewards. In a joint job the second player's
+  money arrives along the way, for each fare or delivery. In the joint courier job the second
+  player throws packages the same way: Q or E and fire.
+
+  In a joint race, story races included, the second player races too. That player has their own
+  checkpoints, their place and the inviter's place on the right of the screen, and their own
+  place in the chat at the finish. A player who just rides with the racer or alongside sees the
+  racer's place on the right.
+
+  Stadiums (Kickstart, Blood Ring, the 8-Track and Dirt Track races), the quarry job, the hotel
+  valet shift and the shooting range are played by two as well. At a stadium the second player
+  is in the arena next to the inviter, on a motorbike of their own or in the same car. Crowns
+  and checkpoints that player takes go into the shared score. At the quarry the second player
+  gets the same bulldozer or dump truck when the inviter gets into theirs, and the rocks and
+  bombs that player pushes count too. On the valet shift either player can park a guest's car.
+  The shooting range invitation is sent from the range's marker: the second player stands in
+  the same booth with the same weapon, and that player's hits on the targets right in front of
+  the booth go into the shared score.
+
+  Smoke's courier in the countryside (Cesar calls about it on Mondays and Fridays by day, on
+  Wednesdays and Saturdays at night) runs only in the host's game. A friend nearby sees the
+  courier's car, markers and money bags. The friend can ram the courier's car or shoot at it,
+  and pick up the dropped bags and the package. Both get the money for each bag and for the
+  package while the friend is within 300 m of the host.
+
+  Many activities can become a contest: the basketball points challenge ("Look behind" with
+  the ball in hand, usually the middle mouse button), pool, blackjack, roulette and the wheel
+  of fortune in the casino (slot machines and video poker excluded), club dancing, the lowrider
+  meet contest, Kickstart, Blood Ring, 8-Track and Dirt Track at the stadiums, races and the
+  "Beat the Cock!" triathlon. U in the first 20 seconds after the start sends the second player
+  a challenge: Y accepts it, N declines. The one who accepts plays the same thing in their own
+  game and has 3 minutes to start. For dancing and basketball an accepting player far away is
+  moved to the challenger at once: on the dance floor the dance starts by itself, both dancing
+  side by side. During a contest a scoreboard at the top of the screen shows both scores. Until
+  a player's own game has started, it also shows how much of the 3 minutes is left and how to
+  start it. At the end the scoreboard shows the result in large letters, and the winner appears
+  in the chat too. Basketball, dancing, the lowriders and Kickstart compare points, the gaming
+  tables winnings, the races, the triathlon and Blood Ring times. Without U the game runs as
+  usual, alone. In a race and the triathlon the same box still has Y for playing them together.
+
+  Pool can be played by two at one table. At the table, while the screen shows the choice of
+  bet: U. No bet is placed until the friend answers. After the friend's Y, the bet is picked
+  and confirmed. The friend takes the table as the second player, and the two shoot in turn.
+  The loser pays the bet to the winner. When the friend has less money, the bet becomes all the
+  friend has. Each player shoots
+  with their own mouse or gamepad and watches through the table's camera. Both stand at the
+  table with cues and see the other aim and shoot. The winner of the game shows in the chat.
+  With a bet already placed, the friend plays a game of their own at another table, as a
+  contest.
+
+  A passenger can shoot from the window. The right mouse button, held, leans out with the
+  weapon, and the left one fires. The firearm held when getting in stays in hand. Without one,
+  the hand holds an Uzi, Tec-9 or MP5, when there is one. At the wheel the game gives a
+  submachine gun as usual. Any firearm works from the window: pistols, shotguns, submachine
+  guns, assault rifles and rifles. A passenger also fires the RPG and the heat-seeking rocket
+  launcher, without lock-on. The driver too aims and shoots anywhere while holding the right
+  mouse button, motorbikes included. On a gamepad only the passenger shoots this way. While a
+  passenger leans out,
+  the mouse wheel (on a gamepad the d-pad up and down) switches between weapons with ammo.
+  A car has one radio: the driver changes the station, and the passenger hears the same song
+  from the same moment. Own music (User Track Player) is each player's own. When a player gets
+  in as the partner's passenger, that player's companions (mission people such as Denise, and
+  the player's gang) take the free seats after a couple of seconds, and get out with the
+  player. A roof board and a convertible's roof are the same for both players.
+
+  A marker placed on the map in the pause menu shows on the partner's radar and map.
+  With more than one partner, a partner's marker has the colour of that partner's arrow for the
+  others, and the host's marker is red.
+  In a car, on a motorbike or bicycle, driving or as a passenger, the radar shows the way by the
+  roads: a red line to the player's own marker, or to the partner's marker when the player has
+  none (the one placed last when there are several), and a yellow line to the mission's goal.
+  The way is turned off in coop\coop.ini, section [game]: gps = 0.
+  A house bought by one player appears for both. Either player can leave a car in a house's
+  garage and take it. Over the partner's head are the partner's health,
+  armour, weapon and wanted stars, and while the partner drives an RC toy, all of it is over
+  the toy. The partner on the radar and map is an arrow turned
+  where the partner walks or drives. Each player picks their own arrow's colour, in the F9
+  window or with the /blip chat command (white, red, green, yellow, a colour as RRGGBB,
+  default): the others see the player in that colour. In the same colour they see the
+  player's nickname in the chat and over the head and the player's map marker, and the way to
+  that marker in a car is a line of that colour. A player's own marker and the way to it are
+  in that player's colour too. The partner's radar marker and the
+  name tag over the partner's head are removed in the file coop\coop.ini, section [game]: the
+  lines partner_blip = 0 and name_tags = 0. A dot in place of the arrow: partner_arrow = 0.
+  In the fork's builds the name tags over players are turned on and off in the game: with the
+  "Name tags over players" box in the F2 window or the /names chat command (/names on,
+  /names off). The "Chat on screen" box is there too. The F8 window shows the server's
+  settings: the host and admins change them in the game.
+
+  Weapons, health packs and money on the ground are shared: what one takes is gone for the
+  other too. Horseshoes, oysters, snapshots and tags count for both. Mission objects, fire,
+  gang territories, plane landing gear, hydraulics and trailers are seen by both. Explosions,
+  rockets, grenades, tank shots, fire truck water, trains and RC models are seen by both too.
+  A train no player drives can be boarded and driven by either player. While the host has a
+  story mission running, other trains are closed. A turf war
+  near the host is led by the host, and both can provoke one by killing gang members. A friend
+  more than 100 m from the host can start a war of their own, and the host sees it in the
+  chat. Both see the people inside buildings, the gates of Pay 'n' Spray and the garages, the
+  police helicopter's searchlight, a car on a tow truck's hook and NPCs shooting from cars, and
+  both hear the horn. The second player does not see the parachute's canopy yet, only the
+  animations.
+  A fire the friend put out goes out for the host too. Weapons a mission gives CJ go to the
+  friend too, so the friend can help with the spray can as well. When the story takes all of
+  CJ's weapons, a friend near the host loses them too. Wanted stars a mission gives reach a
+  friend near the host as well.
+
+  Cheat codes for weather, traffic, pedestrians and game speed work for both. Cheat codes for
+  weapons, money, health and vehicles work only for the one who entered them.
+
+  A cutscene is skipped by both. One presses Enter, the other gets a question and agrees with
+  the same Enter or declines with Esc.
+
+
+6. WHEN SOMETHING IS WRONG
+--------------------------
+  * No invite code. The host has no internet, or a firewall blocks the server. Way A or B from
+    section 4 helps.
+  * The friend sees "The server does not answer", even over a local network. Most often the
+    host's firewall or antivirus keeps the friend out. The host starts the game again and
+    answers "Yes" in the Windows window (installation step 5). With no such window and the
+    friend still unable to join: the antivirus may have deleted or blocked
+    coop\coop-server.exe.
+  * The SA:COOP window does not appear, and F9 does nothing. Most likely install.bat was not
+    run, or the files are not beside gta_sa.exe.
+  * The game closes at once with the error "ASI Loader: This library isn't supported". This
+    happens when the game already had Widescreen Fix or another mod with its own vorbisFile.dll
+    loader, and install.bat of version 0.3.1 or earlier renamed that loader to
+    vorbisHooked.dll. install.bat of this version puts the loader back. By hand: vorbisFile.dll
+    is deleted and vorbisHooked.dll renamed to vorbisFile.dll.
+  * Wanted stars do not go away. One star fades by itself with no police nearby. Two or more
+    do not fade in a city in the ordinary game either: Pay 'n' Spray, a bribe or a save clears
+    them.
+  * The host's world does not load for the friend. The game or mod versions differ. When the
+    chat mentions main.scm, the story file data\script\main.scm differs. A copy of the host's
+    game folder fixes it.
+  * The friend cannot be heard. Speech goes through only with the B key held. While it is held,
+    "Mic" shows on the left of the screen, and the friend sees there who is talking. When the
+    microphone did not open or sends silence, the game says so in the chat. Then in Windows:
+    Settings > Privacy > Microphone, access for desktop apps allowed, and the right microphone
+    set as the default recording device.
+  * The game crashed. A crash report needs the files coop.log and crash.log from the coop
+    folder. When the game has been started again since the crash, coop.old.log (the log of the
+    previous run) goes along too.

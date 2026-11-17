@@ -1293,7 +1293,7 @@ const Places* PlacesOf(const char* cutscene) {
 // May the partner stay where an earlier shot put him? People do not vanish between two shots: this one may show him
 // anywhere, cut by the frame's edge or small at the back, as long as he covers nobody, keeps out of the scene's way
 // and nobody walks into him, and the scene is still where he is. CJ walking off across the room is no reason to go
-// (it was within 9 m: he went after CJ from shot to shot, 28.10: "нап не должен перемещаться из кадра в кадр"); CJ on
+// (it was within 9 m: he went after CJ from shot to shot, 28.10: "the partner must not move from shot to shot"); CJ on
 // another floor or far away is.
 const char* g_staysNo = "";  // why he did not stay (logs)
 bool Stays(const Scene& sc, const Spot& s) {
@@ -1336,7 +1336,7 @@ bool OutOfPicture(const Scene& sc, Spot& out) {
 // The last place before none: next to CJ on his floor, where nobody of the scene stands and not at the camera, with room
 // for him if the floor is known, in the picture if it can be. The first seconds of an interior had no floor yet (its
 // buildings still streaming in): every place was refused, and he was hidden (SWEET3A, SWEET6A, INTRO1A).
-// Half a metre farther than at first: 1.8 m was in CJ's face in Zero's shop ("чуть подальше надо", 31.10).
+// Half a metre farther than at first: 1.8 m was in CJ's face in Zero's shop ("a bit farther is needed", 31.10).
 bool Beside(const Scene& sc, Spot& out) {
     float best = kRejected, clear;
     for (float r : {2.3f, 2.8f, 1.8f, 3.3f})
@@ -1354,7 +1354,7 @@ bool Beside(const Scene& sc, Spot& out) {
     return best > kRejected;
 }
 
-// ---- at CJ's side (the players' choice, 03.11: "рядом с хостом", no places drawn at random): abreast of him, a metre
+// ---- at CJ's side (the players' choice, 03.11: "beside the host", no places drawn at random): abreast of him, a metre
 // or a metre and a half to one side, the same side the whole scene, facing as he does; a little behind him where that
 // is taken, the other side only where both are. Chosen by the picture, he stood by Sweet and Big Smoke in "Tagging Up
 // Turf", 2-5 m off CJ, and in ZERO_2 he walked from place to place.
@@ -1435,7 +1435,7 @@ bool BoneAt(CEntity* e, int bone, CVector& out) {
 }
 
 // Somebody with a body: a person's skeleton has 30 bones and more, a skinned prop up to 15. The sack of BCRAS1 sat in the car as a
-// fourth passenger, no seat was left, and he came into the scene 5 s after CJ ("спустя 4 секунды появляется", 06.11)
+// fourth passenger, no seat was left, and he came into the scene 5 s after CJ ("appears 4 seconds later", 06.11)
 bool HasBody(CEntity* e) {
     auto* rw = (uint8_t*)e->RwObject();
     void* hier = rw && rw[0] == 2 ? Call<0x734A40, void*>(rw) : nullptr;  // GetAnimHierarchyFromSkinClump
@@ -1758,7 +1758,7 @@ Walker WalkerAt(const std::vector<CVector>& path, float now, const CVector& feet
 
 // The way of a whole scene, worked out ahead. Chosen at each cut from what is drawn around CJ just then, the partner knew no
 // map and no more than the shot: he walked 8 m in a 2 s shot, stood 10 m off for three shots, and his first place of
-// INTRO1A hung 0.4 m over the floor ("в воздухе оказался", 05.11). The game's own files hold it all: the place (what the IPLs
+// INTRO1A hung 0.4 m over the floor ("ended up in the air", 05.11). The game's own files hold it all: the place (what the IPLs
 // put there), CJ's and everybody's tracks, the camera. tests: cspath.py works out from them where he stands, when he goes
 // and which way round the furniture, starting and stopping gently at an easy pace, and writes it to cutscene_ways.txt (in coop.asi).
 // All the games read the same text by their own CJ's clock, so nothing of it goes over the network.
@@ -2175,13 +2175,13 @@ Spot Choose(const Scene& sc) {
         if (keep) return prev;
     }
     // A shot keeps him where he stood whenever it can, seen in it or not. Kept only where half of the next shot showed
-    // him, he went where each shot did: from the wall to Sweet and on to the back of the room at every cut ("второй
-    // Сиджей постоянно телепортируется", 28.10; the players chose one place for the whole scene).
+    // him, he went where each shot did: from the wall to Sweet and on to the back of the room at every cut ("the second
+    // CJ teleports all the time", 28.10; the players chose one place for the whole scene).
     // Only where the shot shows him at all: kept where this shot never does, he was out of the picture for most of a
     // scene (29.10, SWEET1B: 8 of 12 shots unseen at the place he stayed at), and a place in the picture comes first.
     // Moved only then, he does not jump about in front of the camera: where he stood is not in this shot.
-    // Kept where the shot shows him for a moment only, he was gone from the picture for most of it ("пропадает
-    // моментами", 31.10): the place must be in it for a fifth of the shot. Half the shot made him change places almost
+    // Kept where the shot shows him for a moment only, he was gone from the picture for most of it ("disappears
+    // at moments", 31.10): the place must be in it for a fifth of the shot. Half the shot made him change places almost
     // every shot, as if he teleported (31.10, the second test).
     g_how = " (stays)";
     static char seenThere[40];
@@ -2215,7 +2215,7 @@ Spot Choose(const Scene& sc) {
     g_how = " (loose)";
     if (loose.score > kRejected && Shows(sc, loose.spot, false)) return loose.spot;
     // None either: the last try in the picture. Without it he stood out of the picture or where the shot did not show
-    // him through 21 of 47 shots of a test, the most of "Nines and AKs"'s first cutscene (31.10, "вовсе не виден"); the
+    // him through 21 of 47 shots of a test, the most of "Nines and AKs"'s first cutscene (31.10, "not seen at all"); the
     // players chose him seen in every shot.
     Best last;
     last.rules = SEEN;
@@ -2225,7 +2225,7 @@ Spot Choose(const Scene& sc) {
     if (last.score > kRejected) return last.spot;
     // Out of the picture in the shot before as well: once more, through narrower gaps and seen for a moment of the shot
     // at least. The talk at Sweet's in "Nines and AKs" had every try fail five shots on end, and he stood where the
-    // camera never looked for half a minute ("практически не видно", 31.10, the fourth test).
+    // camera never looked for half a minute ("practically invisible", 31.10, the fourth test).
     if (may && !g_seenBefore) {
         Best any;
         any.rules = SEEN;
@@ -2794,7 +2794,7 @@ const SceneAct* SceneActAt(float t) {
     return nullptr;
 }
 
-// How he goes round. A heading following the way's keys started and stopped each turn at once, up to 5 rad/s ("резкие", 06.11):
+// How he goes round. A heading following the way's keys started and stopped each turn at once, up to 5 rad/s ("jerky", 06.11):
 // it eases in and out now, within `ease` seconds of the way (a critically damped spring), and no faster than a person turns.
 constexpr float kMostTurn = 2.5f;   // rad/s
 constexpr float kEaseWalk = 0.15f;  // s: on the go he must keep to where he walks

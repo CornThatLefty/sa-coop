@@ -156,7 +156,7 @@ int Fire(uint16_t op, CPlayerPed* me, CPed* helper) {
 }
 
 // STUNT, the BMX rings of the skate park: LOCATE_CHAR_IN_CAR_3D $PLAYER ring 2.5 takes a ring when its player rides
-// through it. The other player's bike through one takes it too, and so does its time (28.10: "забирается?" "неа").
+// through it. The other player's bike through one takes it too, and so does its time (28.10: "does it get picked up?" "nope").
 int Stunt(uint16_t op, CPlayerPed* me, CPed* helper) {
     if (op != 0x0100 || Int(0) != GetPedRef(me) || !CarOf(helper)) return -1;
     return Within(helper->GetPosition(), {Float(1), Float(2), Float(3)}, Float(4), Float(5), Float(6)) ? 1 : -1;
@@ -206,7 +206,7 @@ int Quarry(uint16_t op, CPed* helper) {
 // (LOCATE_CHAR_IN_CAR_CHAR_2D $PLAYER girl 7), stopped, she gets in (TASK_ENTER_CAR_AS_PASSENGER girl 40@), and her run to
 // the client goes on with that car and its player in it (IS_CHAR_IN_CAR $PLAYER 40@: out of it 20 s ends the job; the
 // locates of $PLAYER by her and the client). The other player's car at her first is that car for her run: 40@ is its copy
-// here, and those checks of our player are its player's (29.10: "напарник не может подобрать"). The next girl our car
+// here, and those checks of our player are its player's (29.10: "the partner cannot pick up"). The next girl our car
 // picks up gives 40@ back. Its zone checks (where the clients come) stay our player's.
 constexpr int kPimpCar = 40, kPimpGirls = 35, kPimpGirl = 37;
 int g_pimpOwn = -1;  // our player's own car of the job: 40@ as it began

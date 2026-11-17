@@ -1,6 +1,6 @@
 #pragma once
-// Joint vehicle jobs where both players work (27.10: "раз хост зовет напарника совместно выполнять миссию, то они оба
-// должны это делать"). The job runs in the game of the one who started it (the owner), and the one who joined drives a
+// Joint vehicle jobs where both players work (27.10: "since the host calls the partner to do the mission together, they both
+// must do it"). The job runs in the game of the one who started it (the owner), and the one who joined drives a
 // vehicle of the job of its own (its copy in the owner's game). The owner's game takes that copy for a second player of
 // the job: AMBULAN's patients get into its ambulance and count as delivered when it stops at the hospital, FIRETRU's
 // burning cars and COPCAR's criminals wake up when it comes near them, and the criminals fight the nearer of the two.

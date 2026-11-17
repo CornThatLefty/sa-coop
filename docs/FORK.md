@@ -20,6 +20,7 @@ All players and the server must run the same fork build: the protocol version di
 - [Server additions](#server-additions)
 - [Dedicated mode](#dedicated-mode)
 - [Linux server](#linux-server)
+- [Language of the text outside the game](#language-of-the-text-outside-the-game)
 - [Tests without the game](#tests-without-the-game)
 - [Engine addresses added by the fork](#engine-addresses-added-by-the-fork)
 - [Fixes to inherited behaviour](#fixes-to-inherited-behaviour)
@@ -533,6 +534,20 @@ with `_exit` once the server has stopped.
 **State.** Compiled and tested only in CI: the 22 server tests pass against the Linux binary there. No game has
 connected to it, and the egg has not been imported into a panel. `dedicated = 1` still waits for the client side (see [Dedicated mode](#dedicated-mode)); with
 `dedicated = 0` the first player in the game is the host, as on any server started outside the F9 window.
+
+## Language of the text outside the game
+
+From test build 11 everything read outside the game's own windows is in English: the server's console and
+`server.log`, every line of `coop.log`, the comments the programs write into a new `server.ini` and `coop.ini`,
+`install.bat`, the archive's guide (`package/Instructions.txt`, in place of `Инструкция.txt`) and the issue template.
+The code's comments are in English as well.
+
+Unchanged: the interface in the game (`TR("ru", "en")` pairs, chosen by `language` in `coop.ini`), the texts the
+server sends in both languages, and `docs/ARCHITECTURE.md`.
+
+An ini file kept from an earlier build keeps its Russian comments: the comments are written only into a new file.
+
+`tools/test_server.py` waits for the English log lines (`started on port`, `updated the world save`, `Server stopped`).
 
 ## Tests without the game
 

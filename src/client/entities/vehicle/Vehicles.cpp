@@ -1175,7 +1175,7 @@ void Vehicles::ReleaseKeptCar() {
 // An empty car of ours where this game has no ground: its player went far or into an interior while the other player
 // stays by the car. Parked, it stood; touched (the other player's copy opening its door here, a bump) it woke and fell
 // through the map, and the other game's copy went down with it, the other player getting in too (03.11, 0.3.2:
-// the partner in Binco, the host at the partner's Savanna; "на расстоянии у напарника часто такое"). It is held still
+// the partner in Binco, the host at the partner's Savanna; "at a distance the partner sees this often"). It is held still
 // here (FREEZE_CAR_POSITION's flag) till the ground is back, our player sits in it or it is not ours any more: whoever
 // takes the wheel drives it in its own game, which has the ground. The other player's copy getting in as a passenger
 // keeps it held (it would wake it). A car with somebody else of ours in it (traffic) is the game's own business (its

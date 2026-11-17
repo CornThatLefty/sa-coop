@@ -1701,8 +1701,8 @@ void HoldWayfarerFace(CPed* ped, bool& held) {
     if (a) anim::BlendAmount(a) = 0.01f, anim::BlendDelta(a) = 0.0f;
 }
 
-// A player aboard with no seat of the game's for him sits on one of the model's (13.11, the user's choices "Сидит, встаёт
-// стрелять" and "посади игроков. Не должны они стоять"): boats have no passenger seats in the game
+// A player aboard with no seat of the game's for him sits on one of the model's (13.11, the user's choices "Sits, stands up
+// to shoot" and "seat the players. They must not stand"): boats have no passenger seats in the game
 // (CVehicleModelInfo::GetMaximumNumberOfPassengersFromNumberOfDoors gives 0), he rides tied on (features/aboard). The
 // seat's pose is laid over all he plays at full weight, as a car seats its passenger: CAR_sitp on a car-like seat, SEAT_idle
 // (a park bench's, its root translation brings the pelvis down and back) on a bench; the gunner's standing pose stays under
@@ -2399,7 +2399,7 @@ bool OwnPersonWants(CVehicle* v, int seat, CPed* me) {
 
 // A mission seats its people in the car of its CJ, and a player riding there beside the other one sat in one of those
 // seats: "Sweet's Girl" puts the girl in seat 0 and Sweet in seat 1, "Drive-Thru" its three in 0, 1 and 2. The person
-// could not get in, the mission waited (28.10: "нпс не садились, а выходили"). We move to a seat nobody claims, a person
+// could not get in, the mission waited (28.10: "the NPCs did not sit down but got out"). We move to a seat nobody claims, a person
 // of the other game's mission (its copy) or of our own, or get out.
 // Two players who took one seat at once, each in its own game, saw each other stand outside the car (the host's mission
 // seats all its partners in the same moment, 10.11 audit): the one who goes later in PartnerRank's order moves over.

@@ -133,7 +133,7 @@ void Session::Update() {
             if (m_failReason.empty() && m_net.ViaCode()) {
                 // the code was read and the host told: the way it opens through the routers did not (a provider's NAT,
                 // mobile internet), which no firewall setting fixes (#13: Radmin VPN on, the firewall off)
-                LOGW("Код приглашения: хост оповещён, но ни прямой путь, ни ретранслятор не ответили");
+                LOGW("Invite code: host notified, but neither the direct path nor the relay answered");
                 m_failReason = TR("Сервер не отвечает. Код приглашения сработал, но путь к хосту не открылся: обычно мешает роутер "
                                   "или мобильный интернет у одного из игроков. Помогут Radmin VPN или ZeroTier у обоих (тогда "
                                   "входите по их адресу) или проброс порта на роутере хоста (UDP, по умолчанию 7788). Брандмауэр и "
@@ -179,7 +179,7 @@ void Session::HandleService(uint8_t id, Reader& r) {
             m_peers.clear();
             for (auto& p : w.players) m_peers[p.id] = PeerInfo{p.id, p.name, p.isHost, 0};
             m_state = State::Online;
-            LOGI("Вошли на сервер \"%s\" как игрок %d, хост: %d", m_serverName.c_str(), m_myId, m_hostId);
+            LOGI("Joined server \"%s\" as player %d, host: %d", m_serverName.c_str(), m_myId, m_hostId);
             chat.AddSystem(IsHost() ? TR("Сервер запущен. Вы хост.", "The server is up. You are the host.")
                                     : Format(TR("Вы подключились к серверу «%s».", "You joined the server \"%s\"."),
                                              m_serverName.c_str()));
@@ -284,7 +284,7 @@ void Session::HandleService(uint8_t id, Reader& r) {
         case S_WORLD_END: {
             uint32_t crc = Crc32(m_world.data(), m_world.size());
             if (crc != m_worldCrc) {
-                LOGE("Сохранение мира повреждено при передаче (crc %08X != %08X)", crc, m_worldCrc);
+                LOGE("World save damaged in transfer (crc %08X != %08X)", crc, m_worldCrc);
                 // asked again three times at most: a world too big to take (over 8 MB) came "damaged" for ever
                 if (++m_worldRetries <= 3) {
                     chat.AddError(TR("Мир пришёл с ошибкой. Запрашиваем ещё раз...", "The world arrived damaged. Asking for it again..."));

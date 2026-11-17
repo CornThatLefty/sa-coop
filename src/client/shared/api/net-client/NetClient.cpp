@@ -75,11 +75,11 @@ void PrepareNat(ENetHost* client, ENetAddress& server, ENetAddress& relay, const
     if (g_mapped.Valid()) {
         bool ok = nat::SignalPublish(nat::kDefaultSignalUrl, nat::SignalTopic(code), "PUNCH " + g_mapped.ToString());
         g_signalFailed = !ok;
-        LOGI("Наш внешний адрес: %s. Хост %s", g_mapped.ToString().c_str(), ok ? "оповещён" : "не оповещён (нет связи с ntfy)");
+        LOGI("Our external address: %s. Host %s", g_mapped.ToString().c_str(), ok ? "notified" : "not notified (no connection to ntfy)");
         if (ok) relay = FindRelay(code);  // the host allows our address on its relay when it gets the message
-        if (relay.host) LOGI("У хоста есть ретранслятор: %s", nat::Endpoint{relay.host, relay.port}.ToString().c_str());
+        if (relay.host) LOGI("Host has a relay: %s", nat::Endpoint{relay.host, relay.port}.ToString().c_str());
     } else {
-        LOGW("Внешний адрес не определён (STUN недоступен). Подключаемся напрямую");
+        LOGW("External address unknown (STUN unreachable). Connecting directly");
     }
     if (g_mapped.Valid() && g_mapped.ip == server.host) {
         // the same public address as the host: most NATs cannot loop back, look for it in our network
@@ -95,7 +95,7 @@ void PrepareNat(ENetHost* client, ENetAddress& server, ENetAddress& relay, const
         if (g_lanServer.host) {
             char ip[64];
             enet_address_get_host_ip(&g_lanServer, ip, sizeof(ip));
-            LOGI("Хост найден в локальной сети: %s:%u", ip, g_lanServer.port);
+            LOGI("Host found on the local network: %s:%u", ip, g_lanServer.port);
             server = g_lanServer;
             return;
         }
@@ -171,10 +171,10 @@ void NetClient::ThreadMain(std::string host, uint16_t port) {
     if (g_viaCode) {
         addr.host = codeEp.ip;
         addr.port = codeEp.port;
-        LOGI("Код приглашения: хост %s", codeEp.ToString().c_str());
+        LOGI("Invite code: host %s", codeEp.ToString().c_str());
         PrepareNat(client, addr, relay, host);
     } else if (enet_address_set_host(&addr, host.c_str()) != 0) {
-        LOGE("Не удалось определить адрес сервера \"%s\"", host.c_str());
+        LOGE("Could not resolve the server address \"%s\"", host.c_str());
         enet_host_destroy(client);
         m_state = State::Disconnected;
         m_disconnectEvent = true;
@@ -198,7 +198,7 @@ void NetClient::ThreadMain(std::string host, uint16_t port) {
     }
     // a lossy line (2-6 %) dropped the connection now and then: 15 s before a silent peer counts as gone, 20 s at most
     enet_peer_timeout(peer, 0, 15000, 20000);
-    LOGI("Подключение к %s:%u...", host.c_str(), port);
+    LOGI("Connecting to %s:%u...", host.c_str(), port);
 
     std::vector<Packet> outLocal;
     bool connected = false;
@@ -220,7 +220,7 @@ void NetClient::ThreadMain(std::string host, uint16_t port) {
         outLocal.clear();
 
         if (!connected && relayAt && (GetTickCount64() >= relayAt || peer->state == ENET_PEER_STATE_DISCONNECTED)) {
-            LOGI("Напрямую сервер не отвечает. Подключаемся через ретранслятор");
+            LOGI("No direct answer from the server. Connecting through the relay");
             enet_peer_reset(peer);
             viaRelay();
             peer = enet_host_connect(client, &relay, proto::CH_COUNT, 0);
@@ -237,16 +237,16 @@ void NetClient::ThreadMain(std::string host, uint16_t port) {
                     connected = true;
                     m_state = State::Connected;
                     m_connectEvent = true;
-                    LOGI("Соединение с сервером установлено (MTU %u)", peer->mtu);
+                    LOGI("Connected to the server (MTU %u)", peer->mtu);
                     break;
                 case ENET_EVENT_TYPE_DISCONNECT:
                     if (!connected && relayAt) {
                         relayAt = 1;  // the direct attempt gave up: switch to the relay above
                         break;
                     }
-                    LOGW("Соединение с сервером %s", connected ? "потеряно" : "не установлено");
+                    LOGW("Connection to the server %s", connected ? "lost" : "not established");
                     if (connected)
-                        LOGI("Перед разрывом: пинг %u мс, потери %.1f%%, без подтверждения %u байт, сервер молчал %u мс, код %u",
+                        LOGI("Before the drop: ping %u ms, loss %.1f%%, unacknowledged %u bytes, server silent %u ms, code %u",
                              m_rtt.load(), lastLoss * 100.0 / (double)ENET_PEER_PACKET_LOSS_SCALE, lastInTransit,
                              enet_time_get() - lastHeard, ev.data);
                     connected = false;

@@ -1,57 +1,57 @@
-name: Ошибка или предложение
-description: Сообщить об ошибке, вылете игры или предложить идею
+name: Bug or suggestion
+description: Report of a bug or a game crash, or an idea
 body:
   - type: dropdown
     id: kind
     attributes:
-      label: Что случилось
+      label: Kind
       options:
-        - Ошибка
-        - Вылет игры
-        - Предложение
+        - Bug
+        - Game crash
+        - Suggestion
     validations:
       required: true
   - type: textarea
     id: description
     attributes:
-      label: Описание
-      description: Что произошло и чего вы ждали. Если это предложение, опишите, что хотелось бы видеть в моде.
+      label: Description
+      description: What happened and what was expected. For a suggestion, what the mod should have.
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: Как повторить
-      description: Что делали перед ошибкой. Если она повторяется, напишите шаги.
+      label: Steps to reproduce
+      description: What was done before the bug. For a bug that repeats, the steps.
       placeholder: |
-        1. Хост создал сервер из сохранения.
-        2. Друг подключился по коду.
-        3. Хост встал в маркер миссии, и у друга завис экран.
+        1. The host started a server from a save.
+        2. A friend joined by code.
+        3. The host stepped into a mission marker, and the friend's screen froze.
   - type: dropdown
     id: who
     attributes:
-      label: У кого
+      label: Affected player
       options:
-        - У хоста
-        - У напарника
-        - У обоих
+        - Host
+        - Partner
+        - Both
   - type: input
     id: version
     attributes:
-      label: Версия мода
-      description: Она написана в окне F9 справа вверху.
+      label: Mod version
+      description: Shown at the top right of the F9 window.
       placeholder: 0.1.0
   - type: dropdown
     id: game
     attributes:
-      label: Игра
+      label: Game
       options:
-        - Чистая 1.0 US
-        - Сборка с модами
+        - Clean 1.0 US
+        - Build with mods
   - type: textarea
     id: logs
     attributes:
-      label: Логи
+      label: Logs
       description: >-
-        Перетащите сюда файл `coop\coop.log` из папки игры того, у кого случилась ошибка. Если игра вылетела, нужен
-        ещё `coop\crash.log`, а если не получается подключиться, то `coop\server-data\server.log` хоста.
+        `coop\coop.log` from the game folder of the player with the bug. After a crash, `coop\crash.log` as well;
+        when joining fails, the host's `coop\server-data\server.log`.

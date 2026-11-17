@@ -383,7 +383,7 @@ void PartnerUpdate(CPlayerPed* me) {
     }
     // The camera on our toy (CRemote gives it with CCamera::TakeControl, the target at +0x958). A scene of the host's on
     // the engine takes it and gives it back to CJ: the sticks flew a toy out of sight while CJ stood frozen on the screen
-    // ("я застрял", 31.10).
+    // ("I'm stuck", 31.10).
     if (g_own.out && !g_own.turret && Toy() && !SceneWatched() && !Ref<uint8_t>(0xB5F851) &&
         Ref<CEntity*>(addr::TheCamera + 0x958) != (CEntity*)Toy() && NowMs() - g_own.cameraMs > 1000) {
         g_own.cameraMs = NowMs();

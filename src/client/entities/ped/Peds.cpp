@@ -341,7 +341,7 @@ bool HasLastingBodyAnim(CPed* ped) {
 // Our gym (GYMLS, GYMSF, GYMLV) has its trainer in the ring with our player: the fight (TASK_KILL_CHAR_ON_FOOT at the
 // player after SET_CHAR_HEALTH 1000; LS's sparring pair, going for a player in its corner, keeps 100) and, after the
 // first win, a new trainer for the lesson (widescreen, nobody else within 8 m). Kept local as the gym's other people,
-// ours boxed nobody in the other game ("дерёшься с невидимым", 28.10).
+// ours boxed nobody in the other game ("fighting someone invisible", 28.10).
 // A copy that died here is alive again in its owner's game: a paramedic revived it there. Half a second of such states,
 // not one late state of before its death. The copy stayed dead for good (deadApplied was never taken back): it got its
 // owner's health, place and animations as a dead ped, slid about lying down, took none of our hits, and when the
@@ -1304,7 +1304,7 @@ void Peds::ApplyMirror(NetPed& np) {
     if (ped->InVehicle()) {
         // in before its owner, who still walks up to this car (a mission's people walk, the copy's task runs): it stays.
         // Taken for "out with no leave task", it was warped out, stood by the door and was warped in again when its owner
-        // sat down (28.10: "они сначала садятся, потом телепортируются").
+        // sat down (28.10: "they sit down first, then teleport").
         if (NetVehicle* ev = (st.flags & PedSyncState::F_ENTERING) ? Vehicles::Instance().Find(st.vehNetId) : nullptr;
             ev && ev->veh == ped->Vehicle())
             return;
@@ -1619,7 +1619,7 @@ bool Peds::SeatClaimed(CVehicle* v, int seat) {
 
 // "Ryder": the host's JFUD deletes the pizzeria's cashier for the mission, which puts its own one 0.9 m away. The
 // partner's JFUD (it ran if its player came in by the door) kept its cashier, which stood calm beside the copy with its
-// hands up: "два НПС на месте одного" (28.10). Ours of a script of this game is hidden while a copy of the host's
+// hands up: "two NPCs in place of one" (28.10). Ours of a script of this game is hidden while a copy of the host's
 // mission person of its model stands on it, and shown again when they part.
 void Peds::HideTwins() {
     for (auto it = m_hiddenTwins.begin(); it != m_hiddenTwins.end();) it = m_local.count(*it) ? std::next(it) : m_hiddenTwins.erase(it);

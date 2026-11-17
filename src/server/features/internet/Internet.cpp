@@ -83,8 +83,8 @@ void Internet::Worker() {
     // 1. the router forwards the port (works for most home routers; useless behind carrier NAT)
 #ifdef _WIN32
     m_upnp = nat::UpnpMapPort(m_port, "SA:COOP server");
-    if (m_upnp.ok) LOGI("UPnP: порт %u проброшен. Внешний адрес роутера: %s", m_port, m_upnp.externalIp.c_str());
-    else LOGI("UPnP недоступен (%s). Будем пробивать NAT", m_upnp.error.c_str());
+    if (m_upnp.ok) LOGI("UPnP: port %u forwarded. Router's external address: %s", m_port, m_upnp.externalIp.c_str());
+    else LOGI("UPnP unavailable (%s). Falling back to NAT punch-through", m_upnp.error.c_str());
 #endif  // Linux: a server at an address of its own, with no router to ask and no NAT to punch
 
     // 2. the address the internet sees for our socket
@@ -135,7 +135,7 @@ void Internet::Worker() {
     for (int i = 0; i < 150 && m_turnEnabled && !m_quit && !(relay = m_turn.Relayed()).Valid(); ++i) SleepMs(100);
     if (!ep.Valid()) ep = relay;
     if (!ep.Valid()) {
-        LOGW("Внешний адрес не определён (нет интернета?). Подключиться можно только по локальной сети или по IP");
+        LOGW("External address unknown (no internet?). Joining only over the local network or by IP");
         return;
     }
     std::random_device rd;
@@ -145,14 +145,14 @@ void Internet::Worker() {
         m_code = code;
         m_codeNew = true;
     }
-    LOGI("Код приглашения: %s (внешний адрес %s)", code.c_str(), ep.ToString().c_str());
+    LOGI("Invite code: %s (external address %s)", code.c_str(), ep.ToString().c_str());
 
     // 3. joiners behind NAT announce their endpoint; we answer with packets that open our NAT for them
 #ifdef _WIN32
     m_signal.Start(nat::kDefaultSignalUrl, nat::SignalTopic(code), [this](const std::string& msg) { QueuePunch(msg); });
     if (relay.Valid() && relay.ip != ep.ip) {
         nat::SignalPublish(nat::kDefaultSignalUrl, nat::SignalTopic(code), "RELAY " + relay.ToString());
-        LOGI("Ретранслятор для друзей за любым NAT: %s", relay.ToString().c_str());
+        LOGI("Relay for friends behind any NAT: %s", relay.ToString().c_str());
     }
 #endif
 
@@ -183,7 +183,7 @@ void Internet::Worker() {
             std::lock_guard<std::mutex> lock(m_mutex);
             if (coded.Valid() && m_mapped.Valid() && (m_mapped.ip != coded.ip || m_mapped.port != coded.port) && !told) {
                 told = true;
-                LOGW("Внешний адрес сервера сменился (%s): код приглашения больше не ведёт сюда", m_mapped.ToString().c_str());
+                LOGW("Server's external address changed (%s): the invite code no longer leads here", m_mapped.ToString().c_str());
             }
         }
     }
@@ -197,7 +197,7 @@ void Internet::QueuePunch(const std::string& message) {
     ENetAddress addr{};
     addr.host = ep.ip;
     addr.port = ep.port;
-    LOGI("Пробивка NAT к %s", ep.ToString().c_str());
+    LOGI("NAT punch-through to %s", ep.ToString().c_str());
     if (m_turnEnabled) m_turn.AllowPeer(ep.ip);  // TURN forwards only peers we named
     std::lock_guard<std::mutex> lock(m_mutex);
     m_punches.push_back({addr, 10, 0});

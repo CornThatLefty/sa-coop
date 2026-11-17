@@ -586,8 +586,8 @@ void Puppet() {
     CPlayerPed* me = FindPlayerPed(0);
     if (!g_join.placed || !me || me->InVehicle()) return;
     me->CurrentRotation() = me->AimingRotation() = g_join.heading;
-    // frozen, the player's matrix kept its old way while the angle turned: it struck across the table (28.10, "Карл не в
-    // ту сторону бьет")
+    // frozen, the player's matrix kept its old way while the angle turned: it struck across the table (28.10, "Carl strikes the
+    // wrong way")
     CallMethod<0x43E0C0>(me, g_join.heading);  // CPlaceable::SetHeading
     SetEntityPosition(me, g_join.at);
     me->MoveSpeed() = CVector{};

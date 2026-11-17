@@ -9,7 +9,7 @@
 
 namespace coop::contest {
 
-// the box's line: a challenge to make or to answer ("Соревнование: бильярд. Вызвать игрока %s?"), the keys in hint;
+// the box's line: a challenge to make or to answer ("Contest: pool. Challenge %s?"), the keys in hint;
 // empty when there is nothing to say
 std::string Text(std::string& hint);
 // U (the challenge), Y or N (the answer). False when there was nothing to do (the key goes on to the game).

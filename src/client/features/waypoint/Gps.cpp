@@ -161,7 +161,7 @@ float OffRoute(CVector2D p) {
 // The player's own map waypoint (Waypoints reads it the same way), else the other player's it shows: a red route, or in
 // the colour of the player who set it when it chose one for its mark: its cross, its route and its nickname in one colour
 // (the user's word, 10.11). With neither, the mission's destination (a plain coordinate blip on the radar, the nearest):
-// a yellow one (28.10: "для целей желтый а для метки красная").
+// a yellow one (28.10: "yellow for goals and red for the marker").
 constexpr CRGBA kRed{225, 45, 45, 255}, kYellow{240, 200, 40, 255};
 CRGBA g_partnerColour = kRed;  // the other player's waypoint's (DrawRoute)
 CRGBA g_targetColour = kRed;   // the target's (Target)

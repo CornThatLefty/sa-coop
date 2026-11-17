@@ -1,10 +1,20 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 10: a crash of test build 9 guarded, people in a fight keep
-their fight, and a switch for people and cars passing between games.
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 11: the server's console and log, the settings files and the
+installer in English. Nothing in the game's behaviour changes from test build 10.
 
-It connects to test builds 6 to 9 (protocol 65) and not to builds 1 to 5 or to upstream 0.3.4. Every player and
-the server need this build for the new settings.
+It connects to test builds 6 to 10 (protocol 65) and not to builds 1 to 5 or to upstream 0.3.4.
 
-## Fixed since test build 9
+## New since test build 10
+
+- **English outside the game's windows.** The server's console and `server.log`, the rest of `coop.log`, the
+  comments of `server.ini` and `coop.ini`, `install.bat` and the guide in the archive (`Instructions.txt`, in place
+  of the Russian `Инструкция.txt`) are in English. The game's own windows, chat and hints stay in both languages
+  and follow `language` in `coop\coop.ini`.
+- A `server.ini` or `coop.ini` kept from an earlier build keeps its Russian comments: the programs write the
+  comments only into a new file. Deleting the file gets the English one at the next start, with every setting at
+  its preset.
+- The default greeting of a new `server.ini` is `Chat commands: /help.`
+
+## Fixed in test build 10
 
 - **Crash at `4164655D`.** A passer-by's task for a held thing (a phone, a bag, a tray) used an object that was
   already destroyed. The task now lets go of such an object. The game's list for clearing pointers to deleted people,
@@ -158,7 +168,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.10` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.11` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 

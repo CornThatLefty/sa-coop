@@ -119,7 +119,7 @@ class Server:
     def start(self, stdin=subprocess.DEVNULL):
         cmd = [str(find_bin("coop-server")), "--config", str(self.ini), "--data", str(self.data), "--port", str(self.port)] + self.args
         self.proc = subprocess.Popen(cmd, stdin=stdin, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=self.dir)
-        self.wait_log(r"порту|port", 8)
+        self.wait_log(r"port", 8)
         return self
 
     def log(self):
@@ -401,7 +401,7 @@ def profiles_are_kept_per_game(make):
     b.expect(r"EVT PROFILE size=0 game=1234ABCD")
     b.send("profile 00000000 stale")      # sent before the switch reached it: another game's
     b.send("profile 1234ABCD hello")
-    s.wait_log(r"Bob от другой игры")
+    s.wait_log(r"Bob from the host's other game")
     time.sleep(0.5)                        # the writer's thread
     b.quit()
     b2 = s.join("Bob")
@@ -437,7 +437,7 @@ def waiters_get_the_stored_world_when_the_host_leaves(make):
     a.send(IN_GAME)
     path, crc = make_world(s, "a.b", 3)
     a.send(f"upload {path} host_snapshot")
-    s.wait_log(r"обновил сохранение мира")
+    s.wait_log(r"updated the world save")
     b = s.join("Bob")
     b.send("request")
     a.expect(r"EVT WORLD_WANTED")
@@ -567,7 +567,7 @@ def admins_and_acceptworld(make):
     alice.expect(r"EVT CHAT from=255 The next save of Bob's game replaces")
     bob.send("gameid 00C0FFEE")
     bob.send(f"upload {own} host_snapshot")
-    s.wait_log(r"версия 2")
+    s.wait_log(r"bytes, version 2\)")
     alice.send("request")
     bob.expect(r"EVT WORLD_WANTED")  # the host is in the game: a fresh one is asked for first
     bob.send("keep")
@@ -577,7 +577,7 @@ def admins_and_acceptworld(make):
     carol.expect(r"EVT WELCOME ok=1 .* game=00C0FFEE version=2")
     nxt, nxt_crc = make_world(s, "next.b", 22)
     bob.send(f"upload {nxt} progress")
-    s.wait_log(r"версия 3")
+    s.wait_log(r"bytes, version 3\)")
     # an earlier world comes back
     alice.send("chat /restoreworld")
     alice.expect(r"EVT CHAT from=255 Earlier worlds: 1, 2 ")
@@ -640,7 +640,7 @@ def dedicated_game_id_is_not_overwritten_by_a_new_host(make):
     first, crc = make_world(s, "first.b", 40)
     a.send("gameid AAAA0001")
     a.send(f"upload {first} host_snapshot")
-    s.wait_log(r"версия 1")
+    s.wait_log(r"bytes, version 1\)")
     b = s.join("Bob")
     b.expect(r"EVT PROFILE size=0 game=AAAA0001")
     a.quit()
@@ -701,7 +701,7 @@ def dedicated_host_is_asked_for_snapshots(make):
     a.expect(r"EVT WORLD_WANTED", 4.0)
     snap, snap_crc = make_world(s, "snap.b", 61)
     a.send(f"upload {snap} host_snapshot")
-    s.wait_log(r"версия 2")
+    s.wait_log(r"bytes, version 2\)")
     a.expect(r"EVT WORLD_WANTED", 4.0)  # and again
 
 
@@ -733,16 +733,16 @@ def next_host_gets_the_world_the_last_one_left(make):
     a.send("profile 0C0FFEE0 alice-money")
     second, second_crc = make_world(s, "second.b", 81)
     a.send(f"upload {second} host_snapshot")
-    s.wait_log(r"версия 2")
+    s.wait_log(r"bytes, version 2\)")
     third, third_crc = make_world(s, "third.b", 82)
     a.send(f"upload {third} host_snapshot")       # a snapshot minutes after a backup: no backup of its own
-    s.wait_log(r"версия 3")
+    s.wait_log(r"bytes, version 3\)")
     fourth, fourth_crc = make_world(s, "fourth.b", 83)
     a.send(f"upload {fourth} progress")           # a mission passed: backed up whatever the time
-    s.wait_log(r"версия 4")
+    s.wait_log(r"bytes, version 4\)")
     last, last_crc = make_world(s, "last.b", 84)
     a.send(f"upload {last} host_leaves")
-    s.wait_log(r"версия 5")  # the game's own connection sends what is queued before it closes; the test client's does not
+    s.wait_log(r"bytes, version 5\)")  # the game's own connection sends what is queued before it closes; the test client's does not
     a.quit()
     world = s.data / "world"
     check((world / "world.b.2").read_bytes() == first.read_bytes(), "backup 2: the first replaced world of this run")
@@ -776,7 +776,7 @@ def linux_server_stops_on_quit_and_on_a_signal(make):
         except subprocess.TimeoutExpired:
             raise Failure(f"the server did not end within 6 s of {how}; its log ends: {s.log()[-300:]!r}")
         check(code == 0, f"the server ended with {code} after {how}")
-        check("Сервер остановлен" in s.log(), f"no orderly stop in the log after {how}")
+        check("Server stopped" in s.log(), f"no orderly stop in the log after {how}")
 
     s = make(start=False)
     s.start(stdin=subprocess.PIPE)
