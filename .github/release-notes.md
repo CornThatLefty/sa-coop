@@ -54,7 +54,7 @@ game of a player who has this build, and the server fixes only on a host that ha
 | `SA-COOP.zip` | 6 MB | The mod: `coop.asi`, the server with its `server.ini`, the ASI loader, the animation packs. Every player needs it |
 | `SA-COOP-extras.zip` | 505 MB | Optional: skin packs for the F4 window and voices for a player in a skin. Unchanged from upstream 0.3.4 |
 | `coop.pdb` | 20 MB | Not for playing. Symbols for reading a `crash.log` of this build |
-| `coop-server-linux-x86_64.tar.gz` | 1 MB | Not for playing. The server for a Linux machine |
+| `coop-server-linux-x86_64.tar.gz` | 2 MB | Not for playing. The server for a Linux machine |
 
 Either every player installs the extras or none: a pack's skin is not shown to a player without the pack.
 
