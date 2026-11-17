@@ -63,7 +63,7 @@ Metric MetricOf(uint8_t kind) {
     }
 }
 
-// what the texts call it ("Соревнование: бильярд"), picked when shown: the language can be switched in the menu
+// what the texts call it ("Contest: pool"), picked when shown: the language can be switched in the menu
 std::string KindName(uint8_t kind, int32_t variant) {
     switch (kind) {
         case BASKET: return TR("баскетбол", "basketball");
@@ -155,7 +155,7 @@ bool StoryRuns() {
 }
 
 std::string Who(uint8_t id) { return Net().PeerName(id); }
-// "игрока %s" with one other player, "других игроков" with more
+// "player %s" with one other player, "the other players" with more
 std::string Others() {
     if (Net().Peers().size() == 1) return Format(TR("игрока %s", "%s"), Who(Net().Peers().begin()->first).c_str());
     return TR("других игроков", "the other players");
@@ -643,7 +643,7 @@ void Drop() {
 
 // A basketball court's script (BBALL, near its player):
 //  * It makes its ball only while the ball's spot is off the screen (NOT IS_POINT_ON_SCREEN), not to show it pop up. A
-//    player watching the other one play at the same hoop had no ball until he looked away (03.11: "мяча нету",
+//    player watching the other one play at the same hoop had no ball until he looked away (03.11: "no ball",
 //    20 s). In a session the spot counts as off the screen.
 //  * Who took a basketball challenge starts the points challenge as soon as the ball is in his hands (the user's word,
 //    03.11: the partner did not know he had to press Look Behind). BBALL asks for Look Behind then (IS_BUTTON_PRESSED 0

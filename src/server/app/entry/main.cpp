@@ -53,30 +53,30 @@ static void OnSignal(int) { g_server.Stop(); }  // sets a flag, no more: the net
 
 static void WriteDefaultConfig(const std::wstring& path) {
     const char* text =
-        "; Настройки сервера SA:COOP\r\n"
+        "; SA:COOP server settings\r\n"
         "[server]\r\n"
         "name = SA:COOP server\r\n"
         "port = 7788\r\n"
-        "; Оставьте пустым, если пароль не нужен.\r\n"
+        "; Password for joining. Empty: none.\r\n"
         "password =\r\n"
-        "; Сколько игроков в игре: от 2 до 4.\r\n"
+        "; Number of players in the game: 2 to 4.\r\n"
         "max_players = 2\r\n"
-        "; Ник игрока, который всегда будет хостом. Если пусто, хостом становится тот, кто зашёл первым.\r\n"
+        "; Nickname of the player who is always the host. Empty: the first player to join is the host.\r\n"
         "host =\r\n"
-        "motd = Добро пожаловать! Чтобы увидеть список команд, напишите /help.\r\n"
-        "; Поставьте 1, чтобы игроки могли ранить и убивать друг друга.\r\n"
+        "motd = Chat commands: /help.\r\n"
+        "; 1: players can hurt and kill each other.\r\n"
         "friendly_fire = 0\r\n"
-        "; Поставьте 0, чтобы напарники не могли перемещаться командами /tp и /tphere.\r\n"
+        "; 0: partners cannot move with the /tp and /tphere commands.\r\n"
         "partner_teleport = 1\r\n"
-        "; Поставьте 1, чтобы гибель напарника проваливала сюжетную миссию хоста.\r\n"
+        "; 1: a partner's death fails the host's story mission.\r\n"
         "shared_life = 0\r\n"
-        "; Поставьте 0, чтобы у напарников не работали чит-коды.\r\n"
+        "; 0: cheat codes do not work for partners.\r\n"
         "partner_cheats = 1\r\n"
-        "; Игра через интернет (UPnP, код приглашения, пробивка NAT). Если поставить 0, останется только локальная сеть.\r\n"
+        "; Play over the internet (UPnP, invite code, NAT punch-through). 0: local network only.\r\n"
         "internet = 1\r\n"
-        "; Ретранслятор на случай, если друг не может подключиться по коду.\r\n"
-        "; С бесплатным аккаунтом metered.ca:   turn = metered:<имя приложения>:<API-ключ>\r\n"
-        "; С любым TURN-сервером:               turn = turn:<адрес>:<порт>:<логин>:<пароль>\r\n"
+        "; Relay for a friend who cannot join by code.\r\n"
+        "; With a free metered.ca account:   turn = metered:<app name>:<API key>\r\n"
+        "; With any TURN server:             turn = turn:<address>:<port>:<login>:<password>\r\n"
         "turn =\r\n";
     WriteFileBytes(path, text, strlen(text));
 }
@@ -178,7 +178,7 @@ static int ServerMain(int argc, wchar_t** argv) {
     if (!Writable(dataDir))
         if (std::wstring own = UserDataDir(dataDir); !own.empty()) dataDir = own;
     log::Open(dataDir + L"server.log", true);
-    if (dataDir != wantedDir) LOGW("Нет записи в %s: данные сервера в %s", WideToUtf8(wantedDir).c_str(), WideToUtf8(dataDir).c_str());
+    if (dataDir != wantedDir) LOGW("No write access to %s: server data in %s", WideToUtf8(wantedDir).c_str(), WideToUtf8(dataDir).c_str());
 #else
     if (!Writable(dataDir)) {
         fprintf(stderr, "coop-server: no write access to the data folder %s (--data <dir> names another)\n", NativePath(dataDir).c_str());
@@ -232,10 +232,10 @@ static int ServerMain(int argc, wchar_t** argv) {
         else if (a == L"--config" || a == L"--data") ++i;
     }
 
-    LOGI("%s сервер %s (протокол %u)", COOP_NAME, COOP_VERSION_STR, kProtocolVersion);
+    LOGI("%s server %s (protocol %u)", COOP_NAME, COOP_VERSION_STR, kProtocolVersion);
 #ifdef _WIN32
     if (!g_server.Start(cfg)) {
-        LOGE("Сервер не запущен. Нажмите Enter для выхода.");
+        LOGE("The server did not start. Enter closes the window.");
         getchar();
         return 1;
     }
@@ -251,7 +251,7 @@ static int ServerMain(int argc, wchar_t** argv) {
 #endif
     // the line a hosting panel waits for to show the server as running (deploy/linux/egg-sa-coop-server.json)
     LOGI("Server ready on UDP port %u", (unsigned)cfg.port);
-    LOGI("Команды консоли: players, kick <ник или номер> [причина], say <текст>, reloadbalance, quit");
+    LOGI("Console commands: players, kick <nickname or number> [reason], say <text>, reloadbalance, quit");
 
     std::thread input([] {
 #ifdef _WIN32

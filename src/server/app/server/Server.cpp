@@ -28,7 +28,7 @@ bool Server::Start(const Config& cfg) {
     m_cfg = cfg;
     if (m_cfg.maxPlayers < 1) m_cfg.maxPlayers = 1;
     if (m_cfg.maxPlayers > kMaxPlayers) {
-        LOGW("В max_players указано %d, но игра поддерживает только %d игроков. Мест будет %d.", m_cfg.maxPlayers, kMaxPlayers,
+        LOGW("max_players is %d, but the game supports only %d players. Slots: %d.", m_cfg.maxPlayers, kMaxPlayers,
              kMaxPlayers);
         m_cfg.maxPlayers = kMaxPlayers;
     }
@@ -52,7 +52,7 @@ bool Server::Start(const Config& cfg) {
     // for the most players the game takes, not max_players: that one can be raised while the server runs (Settings.cpp)
     m_host = enet_host_create(&addr, (size_t)kMaxPlayers + 2, CH_COUNT, 0, 0);
     if (!m_host) {
-        LOGE("Не удалось открыть UDP-порт %u (занят другим процессом?)", m_cfg.port);
+        LOGE("Could not open UDP port %u (in use by another process?)", m_cfg.port);
         return false;
     }
     enet_host_compress_with_range_coder(m_host);
@@ -81,8 +81,8 @@ bool Server::Start(const Config& cfg) {
     m_worldVersion = m_world.empty() ? 0 : 1;
 
     for (size_t i = 0; i < m_players.size(); ++i) m_players[i].id = (uint8_t)i;
-    LOGI("Сервер \"%s\" запущен на порту %u, мест: %d%s%s", m_cfg.name.c_str(), m_cfg.port, m_cfg.maxPlayers,
-         m_cfg.password.empty() ? "" : ", с паролем", m_cfg.dedicated ? ", dedicated" : "");
+    LOGI("Server \"%s\" started on port %u, slots: %d%s%s", m_cfg.name.c_str(), m_cfg.port, m_cfg.maxPlayers,
+         m_cfg.password.empty() ? "" : ", password", m_cfg.dedicated ? ", dedicated" : "");
     m_running = true;
     return true;
 }
@@ -92,7 +92,7 @@ bool Server::LoadWorld(const std::wstring& path, const std::string& label) {
     if (!ReadFileBytes(path, data) || data.size() < 1024) return false;
     m_world = std::move(data);
     m_worldLabel = label;
-    LOGI("Сохранение мира загружено: %s (%u байт, crc %08X)", label.c_str(), (unsigned)m_world.size(),
+    LOGI("World save loaded: %s (%u bytes, crc %08X)", label.c_str(), (unsigned)m_world.size(),
          Crc32(m_world.data(), m_world.size()));
     return true;
 }
@@ -112,7 +112,7 @@ void Server::Run() {
         }
         for (auto& c : cmds) HandleCommand(nullptr, c);
         if (m_worldWantedTime && NowMs() - m_worldWantedTime > 10000) {
-            LOGW("Хост не прислал свежий мир за 10 с. Отправляю сохранённый");
+            LOGW("The host sent no fresh world in 10 s. Sending the stored one");
             FlushWorldRequests(false);
         }
         if (NowMs() - m_trafficMs >= 30000) ReportTraffic();
@@ -140,7 +140,7 @@ void Server::Run() {
     m_host = nullptr;
     net::Shutdown();
     WaitProfileWrites();  // the last profiles reach the disk before the process ends
-    LOGI("Сервер остановлен");
+    LOGI("Server stopped");
 }
 
 void Server::QueueConsoleCommand(const std::string& line) {
@@ -183,7 +183,7 @@ void Server::OnConnect(ENetPeer* peer) {
             break;
         }
     if (!slot) {
-        LOGW("Отказ %s: сервер заполнен", ip);
+        LOGW("Refused %s: server full", ip);
         Writer w(S_REJECT);
         w.Str("на сервере нет свободных мест");
         w.Str("the server is full");
@@ -199,7 +199,7 @@ void Server::OnConnect(ENetPeer* peer) {
     slot->connectTime = NowMs();
     peer->data = slot;
     enet_peer_timeout(peer, 0, 15000, 20000);  // as the client's: a lossy line dropped players now and then
-    LOGI("Подключение от %s (слот %d)", ip, id);
+    LOGI("Connection from %s (slot %d)", ip, id);
 }
 
 void Server::OnDisconnect(ENetPeer* peer, bool timeout) {
@@ -207,7 +207,7 @@ void Server::OnDisconnect(ENetPeer* peer, bool timeout) {
     if (Player* p = FindByPeer(peer)) Leave(*p, timeout ? LEAVE_TIMEOUT : LEAVE_QUIT);
 }
 
-void Server::Leave(Player& p, LeaveReason why, const std::string& reason) {
+void Server::Leave(Player& p, LeaveReason why, const std::string& reason, const std::string& reasonEn) {
     if (p.peer) p.peer->data = nullptr;
     bool wasJoined = p.joined, wasHost = p.isHost;
     std::string name = p.name;
@@ -223,13 +223,14 @@ void Server::Leave(Player& p, LeaveReason why, const std::string& reason) {
     Broadcast(CH_RELIABLE, w);
     std::string msg, en;
     if (why == LEAVE_KICKED) {
-        LOGI("%s (%d) выгнан%s%s", name.c_str(), id, reason.empty() ? "" : ": ", reason.c_str());
+        const std::string& english = reasonEn.empty() ? reason : reasonEn;  // an admin's own words have one language
+        LOGI("%s (%d) kicked%s%s", name.c_str(), id, english.empty() ? "" : ": ", english.c_str());
         msg = reason.empty() ? Format("%s выгнан с сервера.", name.c_str())
                              : Format("%s выгнан с сервера: %s.", name.c_str(), reason.c_str());
         en = reason.empty() ? Format("%s was kicked from the server.", name.c_str())
-                            : Format("%s was kicked from the server: %s.", name.c_str(), reason.c_str());
+                            : Format("%s was kicked from the server: %s.", name.c_str(), english.c_str());
     } else {
-        LOGI("%s (%d) отключился%s", name.c_str(), id, why == LEAVE_TIMEOUT ? " (таймаут)" : "");
+        LOGI("%s (%d) disconnected%s", name.c_str(), id, why == LEAVE_TIMEOUT ? " (timeout)" : "");
         msg = Format(why == LEAVE_TIMEOUT ? "%s потерял связь с сервером." : "%s вышел из игры.", name.c_str());
         en = Format(why == LEAVE_TIMEOUT ? "%s lost connection to the server." : "%s left the game.", name.c_str());
     }
@@ -266,7 +267,7 @@ void Server::OnPacket(ENetPeer* peer, uint8_t channel, const uint8_t* data, size
             uint32_t game = r.U32();
             // sent before the host's switch reached that partner: it belongs to the other game
             if (r.Ok() && game == m_gameId) SaveProfile(*p, blob);
-            else if (r.Ok()) LOGI("Профиль %s от другой игры хоста не записан", p->name.c_str());
+            else if (r.Ok()) LOGI("Profile of %s from the host's other game not written", p->name.c_str());
             break;
         }
         case C_WORLD_BEGIN:
@@ -320,7 +321,7 @@ void Server::OnPacket(ENetPeer* peer, uint8_t channel, const uint8_t* data, size
             break;
         }
         default:
-            LOGW("Неизвестное сообщение %u от %s", id, p->name.c_str());
+            LOGW("Unknown message %u from %s", id, p->name.c_str());
             break;
     }
 }
@@ -328,7 +329,7 @@ void Server::OnPacket(ENetPeer* peer, uint8_t channel, const uint8_t* data, size
 void Server::HandleHello(Player& p, Reader& r) {
     Hello h;
     auto reject = [&](const std::string& why, const std::string& en) {
-        LOGW("Отказ \"%s\": %s", h.name.c_str(), why.c_str());
+        LOGW("Refused \"%s\": %s", h.name.c_str(), (en.empty() ? why : en).c_str());
         Writer w(S_REJECT);
         w.Str(why);
         w.Str(en);
@@ -357,7 +358,7 @@ void Server::HandleHello(Player& p, Reader& r) {
         if (silent < 3000 || silent >= 0x80000000u)
             return reject("игрок с таким ником уже на сервере", "a player with this nickname is already here");
         ENetPeer* ghost = old->peer;
-        LOGI("%s подключается снова: старое соединение закрыто", name.c_str());
+        LOGI("%s reconnects: old connection closed", name.c_str());
         Leave(*old, LEAVE_TIMEOUT);
         enet_peer_reset(ghost);
     }
@@ -434,7 +435,7 @@ void Server::Join(Player& p, const Hello& h, const std::string& name) {
 
     SendProfile(p);
     SendInvite(&p);
-    LOGI("%s вошёл как игрок %d%s (версия %s)", p.name.c_str(), p.id, p.isHost ? " [ХОСТ]" : "", h.version.c_str());
+    LOGI("%s joined as player %d%s (version %s)", p.name.c_str(), p.id, p.isHost ? " [HOST]" : "", h.version.c_str());
     SendChat(nullptr, kServerId, kColorInfo, Format("%s зашёл в игру%s.", p.name.c_str(), p.isHost ? " (хост)" : ""),
              Format("%s joined the game%s.", p.name.c_str(), p.isHost ? " (host)" : ""));
     // with a reserved host nickname the role waits for that player
@@ -632,7 +633,7 @@ void Server::HandleWorldEnd(Player& p) {
     if (p.upload.empty()) return;
     uint32_t crc = Crc32(p.upload.data(), p.upload.size());
     if (crc != p.uploadCrc) {
-        LOGW("Сохранение мира от %s повреждено (crc %08X != %08X)", p.name.c_str(), crc, p.uploadCrc);
+        LOGW("World save from %s damaged (crc %08X != %08X)", p.name.c_str(), crc, p.uploadCrc);
     } else if (!MayReplaceWorld(p)) {
         // a dedicated server's world is the game (docs/FORK.md): a game that does not play it leaves it alone
         LOGW("World of %s refused (%s, %u bytes): its game does not play the stored world (version %u, it holds %u)", p.name.c_str(),
@@ -650,7 +651,7 @@ void Server::HandleWorldEnd(Player& p) {
             m_gameIdOwner = p.id;  // the world is its game's: so is the game's number, said already or yet to come
             if (MayNameGame(p, p.claimedGame)) SwitchGame(p.claimedGame);
         }
-        LOGI("Хост %s обновил сохранение мира: %s (%u байт, версия %u)", p.name.c_str(), m_worldLabel.c_str(),
+        LOGI("Host %s updated the world save: %s (%u bytes, version %u)", p.name.c_str(), m_worldLabel.c_str(),
              (unsigned)m_world.size(), m_worldVersion);
         m_prologue = false;
         // partners who joined after the prologue in a new game of their own switch to the host's world now, and after
@@ -684,7 +685,7 @@ void Server::HostStartedNewGame() {
         m_world.clear();
         m_worldLabel.clear();
         RemoveFile(WorldPath());
-        LOGI("Хост начал новую игру: сохранённый мир устарел и удалён");
+        LOGI("Host started a new game: the stored world is out of date and deleted");
     }
     m_prologue = true;
     m_worldWantedTime = 0;
@@ -704,7 +705,7 @@ void Server::SwitchGame(uint32_t game) {
     WaitProfileWrites();  // the other game's profile queued now would be read back half written
     m_gameId = game;
     SaveGameId();
-    LOGI("Хост играет игру %08X: профили напарников из её папки", game);
+    LOGI("Host plays game %08X: partner profiles from its folder", game);
     for (auto& o : m_players)
         if (o.joined && (!o.isHost || m_cfg.dedicated)) SendProfile(o);
 }
@@ -726,7 +727,7 @@ void Server::FollowersJoin() {
             Writer n(S_WORLD_NEWGAME);
             net::Send(w->peer, CH_BULK, n);
             w->follower = true;
-            LOGI("Игрок %s присоединяется к хосту после пролога", w->name.c_str());
+            LOGI("Player %s joins the host after the prologue", w->name.c_str());
         }
 }
 
@@ -810,7 +811,7 @@ void Server::SendWorld(Player& p) {
     Writer e(S_WORLD_END);
     net::Send(p.peer, CH_BULK, e);
     p.sentBytes += m_world.size();
-    LOGI("Отправлено сохранение мира игроку %s (%u байт)", p.name.c_str(), (unsigned)m_world.size());
+    LOGI("World save sent to %s (%u bytes)", p.name.c_str(), (unsigned)m_world.size());
 }
 
 // game 0 (a save from before 0.3.3, or one the host never saved with the mod) keeps the old place: the profiles folder
@@ -877,7 +878,7 @@ void Server::WriteProfiles() {
             m_profileWrites.erase(it);
         }
         EnsureDirectory(path.substr(0, path.rfind(L'\\')));
-        if (!WriteFileBytes(path, data.data(), data.size())) LOGW("Не удалось записать профиль %s", WideToUtf8(path).c_str());
+        if (!WriteFileBytes(path, data.data(), data.size())) LOGW("Could not write profile %s", WideToUtf8(path).c_str());
     }
 }
 
@@ -937,7 +938,7 @@ void Server::Kick(Player& p, const std::string& reason, const std::string& reaso
     w.Str(reasonEn);
     net::Send(p.peer, CH_RELIABLE, w);
     enet_peer_disconnect_later(p.peer, 0);
-    Leave(p, LEAVE_KICKED, reason);
+    Leave(p, LEAVE_KICKED, reason, reasonEn);
 }
 
 Player* Server::Host() {
@@ -971,7 +972,7 @@ void Server::SetHost(Player& p) {
     w.U32(m_gameId);
     Broadcast(CH_RELIABLE, w);
     SendChat(nullptr, kServerId, kColorServer, Format("%s теперь хост.", p.name.c_str()), Format("%s is the host now.", p.name.c_str()));
-    LOGI("Новый хост: %s", p.name.c_str());
+    LOGI("New host: %s", p.name.c_str());
     // dedicated: a game behind the stored world gets it first (it loads at a safe moment, then leads from it)
     if (m_cfg.dedicated && !m_world.empty() && p.status == STATUS_INGAME && p.worldVersion != m_worldVersion) SendWorld(p);
 }
@@ -1120,14 +1121,14 @@ void Server::ReportTraffic() {
         char ip[64] = "";
         if (o.peer) enet_address_get_host_ip(&o.peer->address, ip, sizeof(ip));
         bool here = !strcmp(ip, "127.0.0.1");
-        const char* note = here ? (o.isHost ? " (хост, этот ПК, не в сумме)" : " (этот ПК, не в сумме)") : o.isHost ? " (хост)" : "";
-        if (o.sentBytes) list += Format("%s%s%s %llu КБ", list.empty() ? "" : ", ", o.name.c_str(), note,
+        const char* note = here ? (o.isHost ? " (host, this PC, not in the total)" : " (this PC, not in the total)") : o.isHost ? " (host)" : "";
+        if (o.sentBytes) list += Format("%s%s%s %llu KB", list.empty() ? "" : ", ", o.name.c_str(), note,
                                         (unsigned long long)(o.sentBytes / 1024));
         if (!here) total += o.sentBytes;
         o.sentBytes = 0;
     }
     if (seconds && JoinedCount() > 1 && total)
-        LOGI("Отдано в сеть за %llu с: %llu КБ, %llu кбит/с до сжатия (%s)", (unsigned long long)seconds,
+        LOGI("Sent to the network in %llu s: %llu KB, %llu kbit/s before compression (%s)", (unsigned long long)seconds,
              (unsigned long long)(total / 1024), (unsigned long long)(total * 8 / 1000 / seconds), list.c_str());
 }
 

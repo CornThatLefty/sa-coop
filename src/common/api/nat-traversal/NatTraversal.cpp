@@ -260,12 +260,12 @@ UpnpResult UpnpMapPort(uint16_t port, const std::string& description) {
     UpnpResult r;
     uint32_t local = LocalIp();
     if (!local) {
-        r.error = "нет сетевого подключения";
+        r.error = "no network connection";
         return r;
     }
     auto locations = SsdpDiscover(2500);
     if (locations.empty()) {
-        r.error = "роутер с UPnP не найден (UPnP выключен в настройках роутера?)";
+        r.error = "no UPnP router found (UPnP off in the router's settings?)";
         return r;
     }
     for (auto& loc : locations) {
@@ -308,15 +308,15 @@ UpnpResult UpnpMapPort(uint16_t port, const std::string& description) {
                 if (st == 200) {
                     r.ok = true;
                     r.leaseSeconds = lease;
-                    LOGI("UPnP: UDP %u -> %s:%u на роутере (%s), внешний IP %s", port, localStr.c_str(), port,
+                    LOGI("UPnP: UDP %u -> %s:%u on the router (%s), external IP %s", port, localStr.c_str(), port,
                          type.c_str(), r.externalIp.c_str());
                     return r;
                 }
             }
-            r.error = Format("роутер отказал в пробросе порта (код %d)", st);
+            r.error = Format("the router refused the port forwarding (code %d)", st);
         }
     }
-    if (r.error.empty()) r.error = "роутер не поддерживает WANIPConnection";
+    if (r.error.empty()) r.error = "the router does not support WANIPConnection";
     return r;
 }
 
@@ -512,7 +512,7 @@ HttpResponse HttpRequest(const std::string& method, const std::string& url, cons
 
 bool SignalPublish(const std::string& baseUrl, const std::string& topic, const std::string& message) {
     auto r = HttpRequest("POST", baseUrl + "/" + topic, message, "Content-Type: text/plain\r\n", 6000);
-    if (r.status != 200) LOGW("Сигнальный канал: публикация не удалась (HTTP %d)", r.status);
+    if (r.status != 200) LOGW("Signal channel: publish failed (HTTP %d)", r.status);
     return r.status == 200;
 }
 
@@ -563,9 +563,9 @@ unsigned long __stdcall SignalSubscriber::ThreadProc(void* param) {
         // the channel down (or blocked in the host's network): friends behind a NAT never get their way in by the code
         if (ok != reachable) {
             reachable = ok;
-            if (ok) LOGI("Канал связи для кода приглашения снова доступен");
-            else LOGW("Нет связи с каналом кода приглашения %ls (ошибка %lu): друзья подключатся, только если порт сервера "
-                      "открыт на роутере (UPnP или проброс)", base.host.c_str(), GetLastError());
+            if (ok) LOGI("Invite code channel reachable again");
+            else LOGW("No connection to the invite code channel %ls (error %lu): friends can join only if the server's port "
+                      "is open on the router (UPnP or forwarding)", base.host.c_str(), GetLastError());
         }
         std::string pending;
         while (ok && !self->m_quit) {

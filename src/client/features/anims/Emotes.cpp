@@ -560,7 +560,7 @@ void PlayStage(CPlayerPed* me, const std::string& anim, bool loop, bool hold, co
 }
 
 // A pose, a stance, a dance, a sit (looped or held, the whole body) lasts until the player ends it with Space or F
-// (sprint, enter a car), as SA-MP's animations do (the user's choice, 03.11: "чтобы длились долго, как в самп"): WASD
+// (sprint, enter a car), as SA-MP's animations do (the user's choice, 03.11: "so they last long, as in SA-MP"): WASD
 // ended them at once. A one-shot still stops at any move, and a hit, a fall or a car ends either (the game's events).
 bool Lasting() { return (g_run.flags & (LOOP | HOLD)) && !(g_run.flags & PART); }
 bool PadEnds() {
@@ -1046,7 +1046,7 @@ bool Play(const Emote& e, std::string& why) {
 // As on SA-MP's servers (a players' idea, 09.11): an upper-body gesture, so CJ walks on, played once. Nothing of ours
 // that plays is cut for it, and a CJ the game or a script holds is left alone (WhyNot).
 void ChatGesture() {
-    static const uint16_t kTalks[] = {27, 36, 37, 38};  // "Разговаривать" 1-4: GANGS prtial_gngtlkA-D
+    static const uint16_t kTalks[] = {27, 36, 37, 38};  // "Talk" 1-4: GANGS prtial_gngtlkA-D
     if (g_run.stage != Run::OFF || !WhyNot().empty()) return;
     if (const Emote* e = Find(kTalks[NowMs() % 4])) Start(*e, e->main, 0xFF, 0);
 }

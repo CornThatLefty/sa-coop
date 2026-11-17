@@ -168,7 +168,7 @@ bool TurnRelay::Credentials() {
         std::string app = m_spec.substr(8, c - 8), key = m_spec.substr(c + 1);
         nat::HttpResponse r = nat::HttpRequest("GET", "https://" + app + ".metered.live/api/v1/turn/credentials?apiKey=" + key);
         if (r.status != 200) {
-            LOGW("TURN: metered.ca не выдал учётные данные (HTTP %d)", r.status);
+            LOGW("TURN: metered.ca gave no credentials (HTTP %d)", r.status);
             return false;
         }
         for (size_t at = 0; (at = r.body.find('{', at)) != std::string::npos; ++at) {
@@ -190,14 +190,14 @@ bool TurnRelay::Credentials() {
         m_password = m_spec.substr(5 + p[0].size() + p[1].size() + p[2].size() + 3);  // may contain ':'
     }
     if (m_host.empty() || m_user.empty()) {
-        LOGW("TURN: непонятная настройка turn = %s", m_spec.c_str());
+        LOGW("TURN: unrecognized setting turn = %s", m_spec.c_str());
         return false;
     }
     addrinfo hints{}, *res = nullptr;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
     if (getaddrinfo(m_host.c_str(), port.c_str(), &hints, &res) != 0 || !res) {
-        LOGW("TURN: сервер %s не найден", m_host.c_str());
+        LOGW("TURN: server %s not found", m_host.c_str());
         return false;
     }
     m_server = *(sockaddr_in*)res->ai_addr;
@@ -244,12 +244,12 @@ bool TurnRelay::Request(uint16_t method, const std::vector<Bytes>& attrs, Bytes*
                 std::string k = m_user + ":" + m_realm + ":" + m_password;
                 m_key = Digest(BCRYPT_MD5_ALGORITHM, nullptr, k.data(), k.size());
                 if (code == 401 && auth) {
-                    LOGW("TURN: неверные учётные данные");
+                    LOGW("TURN: wrong credentials");
                     return false;
                 }
                 break;  // resend with credentials
             }
-            LOGW("TURN: запрос %04X отклонён, ошибка %d", method, code);
+            LOGW("TURN: request %04X refused, error %d", method, code);
             return false;
         }
     }
@@ -282,7 +282,7 @@ void TurnRelay::OnTurnPacket(const uint8_t* data, size_t len) {
         peer.reportMs = NowMs();
         char ip[32];
         inet_ntop(AF_INET, &from.sin_addr, ip, sizeof(ip));
-        LOGI("TURN: игрок %s:%u подключается через ретранслятор", ip, ntohs(from.sin_port));
+        LOGI("TURN: player %s:%u connecting through the relay", ip, ntohs(from.sin_port));
     }
     peer.lastMs = NowMs();
     const Bytes& d = p.attrs[A_DATA];
@@ -314,7 +314,7 @@ void TurnRelay::Thread() {
     BigBuffers(m_sock);
     Bytes resp;
     if (!Request(ALLOCATE, {Attr(A_TRANSPORT, "\x11\0\0\0", 4)}, &resp)) {
-        LOGW("TURN: не удалось получить адрес ретранслятора у %s", m_host.c_str());
+        LOGW("TURN: could not get a relay address from %s", m_host.c_str());
         closesocket(m_sock);
         return;
     }
@@ -330,7 +330,7 @@ void TurnRelay::Thread() {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_relayed.ip = relayed.sin_addr.s_addr;
         m_relayed.port = ntohs(relayed.sin_port);
-        LOGI("TURN: адрес ретранслятора %s (сервер %s)", m_relayed.ToString().c_str(), m_host.c_str());
+        LOGI("TURN: relay address %s (server %s)", m_relayed.ToString().c_str(), m_host.c_str());
     }
 
     uint64_t refreshAt = NowMs() + std::max<uint32_t>(m_lifetime, 120) * 500, permissionsAt = NowMs() + 240000;
@@ -361,7 +361,7 @@ void TurnRelay::Thread() {
             if (now - peer.reportMs < 30000 || !(peer.toCount || peer.fromCount)) continue;
             char ip[32];
             inet_ntop(AF_INET, &peer.addr.sin_addr, ip, sizeof(ip));
-            LOGI("TURN: %s:%u за %u с: другу %u пакетов (%llu КБ, до %u байт), от друга %u (%llu КБ)", ip,
+            LOGI("TURN: %s:%u in %u s: to the friend %u packets (%llu KB, up to %u bytes), from the friend %u (%llu KB)", ip,
                  ntohs(peer.addr.sin_port), (unsigned)((now - peer.reportMs) / 1000), peer.toCount, peer.toBytes / 1024,
                  peer.toMax, peer.fromCount, peer.fromBytes / 1024);
             peer.toCount = peer.fromCount = peer.toMax = 0;

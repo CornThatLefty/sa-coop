@@ -47,8 +47,8 @@ bool Aircraft(CVehicle* v) { return v->VehicleSubClass() == VEHICLE_TYPE_HELI ||
 bool Boat(CVehicle* v) { return v->VehicleSubClass() == VEHICLE_TYPE_BOAT; }
 bool CutsceneOn() { return Ref<uint8_t>(0xB5F851) != 0; }  // CCutsceneMgr::ms_running
 
-// The view from his place in an aircraft (13.11, the user's choice "Из кабины"): the game's camera of an attached player
-// sat on him inside and turned with the aircraft ("был пилота осмотр"). The camera is attached to the aircraft instead
+// The view from his place in an aircraft (13.11, the user's choice "From the cockpit"): the game's camera of an attached player
+// sat on him inside and turned with the aircraft ("the view was the pilot's"). The camera is attached to the aircraft instead
 // (ATTACH_CAMERA_TO_VEHICLE: MODE_ATTACHCAM puts it and the point it looks at in the vehicle's axes, the world's up, so a
 // bank does not tilt the view) at the eyes over his place, and the mouse or the right stick turn the look about the
 // aircraft as the game's first-person aims turn (CCam::Process_Rocket, 0x511B50).
@@ -66,14 +66,14 @@ void CabinOn(int vehicle, const CVector& seat) {
     Cmd(0x0679).I(vehicle).F(e.x).F(e.y).F(e.z).F(e.x).F(e.y + 5.0f).F(e.z).F(0.0f).I(2).Run();  // ATTACH_CAMERA_TO_VEHICLE, a cut
 }
 
-// The view from behind (13.11, the user's words "хочу вид от 3 лица ... переключение вида", the default): the vehicle's
+// The view from behind (13.11, the user's words "I want a third-person view ... view switching", the default): the vehicle's
 // follow camera, as its driver's (POINT_CAMERA_AT_CAR with MODE_CAM_ON_A_STRING, a cut: Zero's RC planes in ZER2 have it
 // on a vehicle CJ is not in; CCam::Process_FollowCar_SA looks at its target's driver and passengers, never at the player,
 // and turns with the mouse or the right stick). The camera change key (V, the pad's Select) goes to the cabin in an
 // aircraft, to the gun's own view on a boat, and back. Tied on, the player has the game's camera of an attached gunner
 // (MODE_HELICANNON_1STPERSON, CPed::AttachPedToEntity): seen again, whatever held the camera meanwhile (a scene of the
 // host's mission) is done with it, and the chosen view comes back. On a boat he shoots from the gun's view (the user's
-// "встаёт стрелять"): from behind the fire button is held off, as SET_PLAYER_FIRE_BUTTON holds it, else his gun fired
+// "stands up to shoot"): from behind the fire button is held off, as SET_PLAYER_FIRE_BUTTON holds it, else his gun fired
 // from the lap wherever he faced; in an aircraft always (no gun there). What it was before comes back (a script may hold
 // it too).
 constexpr uint16_t kModeCamOnAString = 18, kModeHeliCannon = 45, kModeAimAttached = 65;
@@ -172,10 +172,10 @@ CVector SpotOn(CVehicle* v) {
     return o;
 }
 
-// The boats' seats, read off their models in the game's own gta3.img (13.11; the user's words "изучи модели ... для
-// правильного положения игрока сидя или стоя", "учитывай еще места для 3 - 4 игроков", the choice "Сидит, встаёт стрелять",
-// and after build 15, where the second and third stood on the Jetmax's rear seat's back: "На лодках есть сидения сзади.
-// Поэтому изучи нормально и посади игроков. Не должны они стоять"). E:\GTA COOP Tests\scripts\analysis\aboard: deckmap.py
+// The boats' seats, read off their models in the game's own gta3.img (13.11; the user's words "study the models ... for
+// the right position of a player sitting or standing", "also count seats for 3 - 4 players", the choice "Sits, stands up to shoot",
+// and after build 15, where the second and third stood on the Jetmax's rear seat's back: "The boats have seats at the back.
+// So study them properly and seat the players. They must not stand"). E:\GTA COOP Tests\scripts\analysis\aboard: deckmap.py
 // and boardseats.py read the seats, boatseats.py puts the game's skeleton on each in its pose (fam1.dff under the first key
 // of CAR_sitp or SEAT_idle) and makes these rows. By rank (PlaceRank, up to three aboard): beside a driver who sits (the
 // front seat's dummy mirrored: a boat's driver sits right at it), on the rear seat, the benches along the sides and the
@@ -224,7 +224,7 @@ struct Place {
     CVector rise;          // a boat's seat's place to stand up to shoot
 };
 
-// In an aircraft (13.11, the user's words "Рядом с пилотом как то не то для остальных 2 игроков"): the first in sight in
+// In an aircraft (13.11, the user's words "Beside the pilot is somehow not right for the other 2 players"): the first in sight in
 // the seat beside the pilot where the model has two front seats side by side and no player of the game's sits there (the
 // Shamal's cockpit has them, its cabin behind is empty in the model), the second and third hidden behind the pilot's seat
 // and that one, no longer all three by the pilot with one view; behind him in the middle when that seat is taken. A
@@ -272,7 +272,7 @@ void Unseen(CPlayerPed* me, bool unseen) {
     Cmd(0x0337).I(GetPedRef(me)).I(!unseen).Run();
 }
 
-// The gun's view on a boat over his shoulder (14.11, the user's "на v надо 3 лицо а не первое"): the game's camera of one
+// The gun's view on a boat over his shoulder (14.11, the user's "V needs third person, not first"): the game's camera of one
 // tied on with a weapon that aims, as it has the pool cue (MODE_AIMWEAPON_ATTACHED with free aim, CPed::AttachPedToEntity),
 // in place of the gunner's first person the attach sets (MODE_HELICANNON_1STPERSON). CCamera::Using1stPersonWeaponMode
 // counts both, so he aims and fires as before; the detach clears either (CPlayerPed::ClearWeaponTarget). His free aim
