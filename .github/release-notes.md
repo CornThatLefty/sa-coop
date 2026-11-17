@@ -20,7 +20,11 @@ people and traffic.
   in the host's game after dying in the partner's stands up again there after about two seconds: worth a report
   with both `coop.log` files.
 
-Both are new ground and were not run in a game. Either switch set to 0 in F8 gives the earlier behaviour.
+- **Linux server stops when asked.** On a Pelican panel the server logged its stop and never ended, and had to be
+  killed. It ends within a second of the panel's Stop now (the fix is in the server: Reinstall the panel's server
+  with this release).
+
+The first two are new ground and were not run in a game. Either switch set to 0 in F8 gives the earlier behaviour.
 
 ## New in test build 7
 

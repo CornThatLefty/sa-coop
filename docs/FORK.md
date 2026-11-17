@@ -421,6 +421,13 @@ sanitized to letters, digits and `_-.[]`.
 BCrypt code). They get a home computer through its router. `turn =` is ignored with a warning. **Kept:** STUN through
 the game socket and the invite code, written to `server-data/invite.txt`.
 
+**Stopping.** `quit` typed into the console, `SIGINT` or `SIGTERM` stop the server in order: players are told, the
+last profiles are written. CI checks it in the image a Pelican or Pterodactyl panel runs servers in
+(`ghcr.io/pelican-eggs/yolks:debian`), with the console left open after `quit` as a panel leaves it. Before test
+build 8 the server logged its stop there and never ended: the process's exit waited for the thread reading the
+console (glibc 2.41 takes every stream's lock at exit). The console is read with `read()` now, and the process ends
+with `_exit` once the server has stopped.
+
 **State.** Compiled and tested only in CI: the 22 server tests pass against the Linux binary there. No game has
 connected to it, and the egg has not been imported into a panel. `dedicated = 1` still waits for the client side (see [Dedicated mode](#dedicated-mode)); with
 `dedicated = 0` the first player in the game is the host, as on any server started outside the F9 window.

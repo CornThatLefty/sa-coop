@@ -37,6 +37,7 @@ void Internet::Stop() {
         m_upnp.ok = false;
     }
     if (m_host) m_host->intercept = nullptr;
+    m_host = nullptr;  // the server destroys it next: a second Stop (the destructor's) must not touch it
     g_self = nullptr;
 }
 
