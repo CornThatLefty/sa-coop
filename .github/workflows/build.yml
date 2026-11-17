@@ -103,6 +103,27 @@ jobs:
           ldd dist/coop-server-linux-x86_64/coop-server
           objdump -T dist/coop-server-linux-x86_64/coop-server | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1
 
+      - name: Stop check in the panel's image (diagnosis)
+        run: |
+          set +e
+          IMG=ghcr.io/pelican-eggs/yolks:debian
+          run_case() {  # $1 name, $2 docker flags, $3 wrapper
+            rm -rf /tmp/pel && mkdir -p /tmp/pel && cp -r dist/coop-server-linux-x86_64/. /tmp/pel/ && chmod -R a+rwX /tmp/pel
+            START=$SECONDS
+            if [ "$3" = "tty" ]; then
+              ( sleep 15; echo players; sleep 2; echo quit; sleep 30 ) | timeout 70 script -qfec "docker run --rm -it -v /tmp/pel:/home/container -e STARTUP='./coop-server --port 7788' -e SERVER_PORT=7788 $IMG" /dev/null > /tmp/out.txt 2>&1
+            else
+              ( sleep 15; echo players; sleep 2; echo quit; sleep 30 ) | timeout 70 docker run --rm -i -v /tmp/pel:/home/container -e STARTUP='./coop-server --port 7788' -e SERVER_PORT=7788 $IMG > /tmp/out.txt 2>&1
+            fi
+            echo "== $1: exit $? after $((SECONDS - START)) s (quit typed at 17 s)"
+            tail -n 12 /tmp/out.txt
+            echo "-- server.log"
+            tail -n 6 /tmp/pel/server-data/server.log
+          }
+          docker pull -q $IMG
+          run_case pipe "" pipe
+          run_case tty "" tty
+
       - uses: actions/upload-artifact@v4
         with:
           name: coop-server-linux-x86_64
