@@ -1,5 +1,6 @@
 #include "features/internet/Internet.h"
 
+#include <cstring>
 #include <random>
 
 #include "common/lib/log/Log.h"
@@ -14,8 +15,12 @@ Internet* g_self = nullptr;
 void Internet::Start(ENetHost* host, uint16_t port, const std::string& turnSpec) {
     m_host = host;
     m_port = port;
+#ifdef _WIN32
     m_turnEnabled = !turnSpec.empty();
     if (m_turnEnabled) m_turn.Start(turnSpec, port);
+#else
+    if (!turnSpec.empty()) LOGW("turn = is not used by the Linux server: players reach its address directly");
+#endif
     g_self = this;
     host->intercept = &Internet::Intercept;
     m_quit = false;
@@ -57,7 +62,9 @@ int ENET_CALLBACK Internet::Intercept(ENetHost* host, ENetEvent*) {
     if (len >= sizeof(nat::kPunchMagic) - 1 && !memcmp(data, nat::kPunchMagic, sizeof(nat::kPunchMagic) - 1)) return 1;
     if (len == sizeof(nat::kDiscoverMagic) - 1 && !memcmp(data, nat::kDiscoverMagic, len)) {
         std::string reply = nat::kHereMagic + std::to_string(self->m_port);
-        ENetBuffer buf{reply.size(), (void*)reply.data()};
+        ENetBuffer buf{};
+        buf.data = (void*)reply.data();
+        buf.dataLength = reply.size();
         enet_socket_send(host->socket, &host->receivedAddress, &buf, 1);
         return 1;
     }
@@ -73,9 +80,11 @@ int ENET_CALLBACK Internet::Intercept(ENetHost* host, ENetEvent*) {
 
 void Internet::Worker() {
     // 1. the router forwards the port (works for most home routers; useless behind carrier NAT)
+#ifdef _WIN32
     m_upnp = nat::UpnpMapPort(m_port, "SA:COOP server");
     if (m_upnp.ok) LOGI("UPnP: порт %u проброшен. Внешний адрес роутера: %s", m_port, m_upnp.externalIp.c_str());
     else LOGI("UPnP недоступен (%s). Будем пробивать NAT", m_upnp.error.c_str());
+#endif  // Linux: a server at an address of its own, with no router to ask and no NAT to punch
 
     // 2. the address the internet sees for our socket
     auto askStun = [this](const ENetAddress& addr) {
@@ -85,7 +94,9 @@ void Internet::Worker() {
             nat::BuildStunRequest(req, m_txid);
             m_stunWaiting = true;
         }
-        ENetBuffer buf{sizeof(req), req};
+        ENetBuffer buf{};
+        buf.data = req;
+        buf.dataLength = sizeof(req);
         enet_socket_send(m_host->socket, &addr, &buf, 1);
     };
     ENetAddress stunAddr{};  // the server that answered
@@ -97,7 +108,7 @@ void Internet::Worker() {
         addr.port = (enet_uint16)atoi(server.c_str() + colon + 1);
         askStun(addr);
         for (int i = 0; i < 20 && !m_quit; ++i) {
-            Sleep(100);
+            SleepMs(100);
             std::lock_guard<std::mutex> lock(m_mutex);
             if (!m_stunWaiting) break;
         }
@@ -120,7 +131,7 @@ void Internet::Worker() {
     }
     // the relay address goes to the signalling channel (or into the code when nothing else works)
     nat::Endpoint relay;
-    for (int i = 0; i < 150 && m_turnEnabled && !m_quit && !(relay = m_turn.Relayed()).Valid(); ++i) Sleep(100);
+    for (int i = 0; i < 150 && m_turnEnabled && !m_quit && !(relay = m_turn.Relayed()).Valid(); ++i) SleepMs(100);
     if (!ep.Valid()) ep = relay;
     if (!ep.Valid()) {
         LOGW("Внешний адрес не определён (нет интернета?). Подключиться можно только по локальной сети или по IP");
@@ -136,11 +147,13 @@ void Internet::Worker() {
     LOGI("Код приглашения: %s (внешний адрес %s)", code.c_str(), ep.ToString().c_str());
 
     // 3. joiners behind NAT announce their endpoint; we answer with packets that open our NAT for them
+#ifdef _WIN32
     m_signal.Start(nat::kDefaultSignalUrl, nat::SignalTopic(code), [this](const std::string& msg) { QueuePunch(msg); });
     if (relay.Valid() && relay.ip != ep.ip) {
         nat::SignalPublish(nat::kDefaultSignalUrl, nat::SignalTopic(code), "RELAY " + relay.ToString());
         LOGI("Ретранслятор для друзей за любым NAT: %s", relay.ToString().c_str());
     }
+#endif
 
     // 4. while the server runs: renew a finite UPnP lease, and keep the port's mapping alive. A router gave a forwarded
     //    port a new external port after a minute of silence (12.11), and the code given to a player who came later led
@@ -153,7 +166,7 @@ void Internet::Worker() {
     uint64_t renewAt = NowMs() + (uint64_t)m_upnp.leaseSeconds * 500, keepAt = NowMs() + 15000, checkAt = 0;
     bool told = false;
     while (!m_quit) {
-        Sleep(500);
+        SleepMs(500);
         uint64_t now = NowMs();
         if (m_upnp.ok && m_upnp.leaseSeconds > 0 && now >= renewAt) {
             nat::UpnpResult again = nat::UpnpMapPort(m_port, "SA:COOP server");
@@ -194,7 +207,9 @@ void Internet::Service() {
     uint64_t now = NowMs();
     for (auto it = m_punches.begin(); it != m_punches.end();) {
         if (now >= it->nextMs) {
-            ENetBuffer buf{sizeof(nat::kPunchMagic) - 1, (void*)nat::kPunchMagic};
+            ENetBuffer buf{};
+            buf.data = (void*)nat::kPunchMagic;
+            buf.dataLength = sizeof(nat::kPunchMagic) - 1;
             enet_socket_send(m_host->socket, &it->addr, &buf, 1);
             it->nextMs = now + 200;
             if (--it->left <= 0) {

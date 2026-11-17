@@ -1,0 +1,24 @@
+# systemd unit of the SA:COOP dedicated server. README.md beside it has the steps.
+[Unit]
+Description=SA:COOP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=sacoop
+Group=sacoop
+WorkingDirectory=/opt/sa-coop
+ExecStart=/opt/sa-coop/coop-server
+Restart=on-failure
+RestartSec=5
+# SIGTERM: the server tells its players, writes the last profiles and exits
+KillSignal=SIGTERM
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/sa-coop
+
+[Install]
+WantedBy=multi-user.target

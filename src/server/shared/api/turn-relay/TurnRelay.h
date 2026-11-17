@@ -1,5 +1,7 @@
 #pragma once
+#ifdef _WIN32
 #include <winsock2.h>
+#endif
 
 #include <atomic>
 #include <cstdint>
@@ -12,6 +14,18 @@
 
 #include "common/api/nat-traversal/NatTraversal.h"
 
+#ifndef _WIN32
+namespace coop::server {
+// The Linux build (a server at an address of its own) relays nothing: the players reach it directly.
+class TurnRelay {
+public:
+    void Start(const std::string&, uint16_t) {}
+    void Stop() {}
+    void AllowPeer(uint32_t) {}
+    nat::Endpoint Relayed() { return {}; }
+};
+}  // namespace coop::server
+#else
 namespace coop::server {
 
 // TURN relay (RFC 8656 subset: Allocate, Refresh, CreatePermission, Send/Data indications) for friends
@@ -62,3 +76,4 @@ private:
 };
 
 }  // namespace coop::server
+#endif

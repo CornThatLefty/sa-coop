@@ -1,9 +1,16 @@
 #include "common/api/nat-traversal/NatTraversal.h"
 
+#ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <winhttp.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <cstring>
@@ -34,6 +41,26 @@ bool Endpoint::Parse(const std::string& s, Endpoint& out) {
     return true;
 }
 
+#ifndef _WIN32
+// Linux: the dedicated server's build (docs/FORK.md, "Linux server"). It stands at an address of its own, so what
+// gets a home computer through its router is left out: UPnP, the signalling channel, hole punching.
+uint32_t LocalIp() {
+    int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s < 0) return 0;
+    sockaddr_in to{};
+    to.sin_family = AF_INET;
+    to.sin_port = htons(53);
+    inet_pton(AF_INET, "8.8.8.8", &to.sin_addr);
+    uint32_t ip = 0;
+    if (connect(s, (sockaddr*)&to, sizeof(to)) == 0) {  // sends nothing: it only selects the outgoing interface
+        sockaddr_in me{};
+        socklen_t len = sizeof(me);
+        if (getsockname(s, (sockaddr*)&me, &len) == 0) ip = me.sin_addr.s_addr;
+    }
+    close(s);
+    return ip;
+}
+#else
 static void EnsureWinsock() {
     static bool done = false;
     if (!done) {
@@ -61,6 +88,7 @@ uint32_t LocalIp() {
     closesocket(s);
     return ip;
 }
+#endif
 
 bool IsPrivateIp(uint32_t ipNet) {
     uint32_t ip = ntohl(ipNet);
@@ -68,6 +96,14 @@ bool IsPrivateIp(uint32_t ipNet) {
            (ip >> 22) == ((100 << 2) | 1) /* 100.64/10 */ || (ip >> 24) == 127 || ip == 0;
 }
 
+#ifndef _WIN32
+UpnpResult UpnpMapPort(uint16_t, const std::string&) {
+    UpnpResult r;
+    r.error = "not in the Linux build";
+    return r;
+}
+void UpnpUnmapPort(const UpnpResult&, uint16_t) {}
+#else
 static std::string Lower(std::string s) {
     for (auto& c : s) c = (char)tolower((unsigned char)c);
     return s;
@@ -292,6 +328,7 @@ void UpnpUnmapPort(const UpnpResult& r, uint16_t port) {
              "</NewExternalPort><NewProtocol>UDP</NewProtocol>",
          &st);
 }
+#endif
 
 // ============================================================================ STUN
 const std::vector<std::string>& StunServers() {
@@ -302,7 +339,7 @@ const std::vector<std::string>& StunServers() {
 }
 
 void BuildStunRequest(uint8_t out[20], uint8_t txid[12]) {
-    static std::mt19937 rng((unsigned)GetTickCount() ^ (unsigned)GetCurrentProcessId());
+    static std::mt19937 rng(std::random_device{}());
     out[0] = 0x00;
     out[1] = 0x01;  // Binding Request
     out[2] = 0x00;
@@ -401,6 +438,13 @@ std::string SignalTopic(const std::string& code) {
     return Format("sacoop-%08x%08x", a, b);
 }
 
+#ifndef _WIN32
+// ============================================================================ no HTTP in the Linux build
+HttpResponse HttpRequest(const std::string&, const std::string&, const std::string&, const std::string&, int) { return {}; }
+bool SignalPublish(const std::string&, const std::string&, const std::string&) { return false; }
+void SignalSubscriber::Start(const std::string&, const std::string&, std::function<void(const std::string&)>) {}
+void SignalSubscriber::Stop() {}
+#else
 // ============================================================================ WinHTTP
 struct CrackedUrl {
     std::wstring host, path;
@@ -553,5 +597,6 @@ unsigned long __stdcall SignalSubscriber::ThreadProc(void* param) {
     }
     return 0;
 }
+#endif
 
 }  // namespace coop::nat

@@ -1,5 +1,7 @@
 #include "shared/api/turn-relay/TurnRelay.h"
 
+#ifdef _WIN32  // the whole file: the Linux build has the header's empty relay
+
 #include <bcrypt.h>
 #include <ws2tcpip.h>
 
@@ -395,3 +397,5 @@ void TurnRelay::Thread() {
 }
 
 }  // namespace coop::server
+
+#endif  // _WIN32

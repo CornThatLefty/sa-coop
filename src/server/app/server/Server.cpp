@@ -1,9 +1,10 @@
 #include "app/server/Server.h"
 
-#include <windows.h>
-
 #include <algorithm>
+#include <cstring>
+#include <cwchar>
 #include <thread>
+#include <tuple>
 
 #include "common/api/net/Net.h"
 #include "common/config/version/Version.h"
@@ -18,6 +19,10 @@ using namespace proto;
 static constexpr uint32_t kColorServer = 0xFFC864FF;  // RGBA, orange-ish
 static constexpr uint32_t kColorInfo = 0xA0C8FFFF;
 static constexpr uint32_t kColorError = 0xFF6464FF;
+static constexpr int kWorldBackups = 10;             // world.b.1 (the latest) to world.b.10
+static constexpr uint64_t kAcceptWorldMs = 300000;   // an admin's /acceptworld holds that long
+static constexpr int kWrongPasswords = 5;            // that many from an address, and it waits
+static constexpr uint32_t kFirstBlockSeconds = 60, kLongestBlockSeconds = 3600;
 
 bool Server::Start(const Config& cfg) {
     m_cfg = cfg;
@@ -54,18 +59,29 @@ bool Server::Start(const Config& cfg) {
     if (m_cfg.internet) m_internet.Start(m_host, m_cfg.port, m_cfg.turn);
 
     // initial world: explicit file from the launcher, otherwise the last uploaded one
-    if (!m_cfg.worldFile.empty()) {
+    if (m_cfg.dedicated) {
+        // the stored world is the game, whoever hosts: a file only seeds a server that has none yet
+        if (LoadWorld(WorldPath(), "world.b")) {
+            LoadGameId();
+            if (!m_cfg.worldFile.empty() || m_cfg.newGame)
+                LOGW("--world and --new-game are ignored: this dedicated server has a world already (/newgame starts a new one)");
+        } else {
+            if (!m_cfg.worldFile.empty() && LoadWorld(m_cfg.worldFile, "seed")) WriteFileBytes(WorldPath(), m_world.data(), m_world.size());
+        }
+    } else if (!m_cfg.worldFile.empty()) {
         if (LoadWorld(m_cfg.worldFile, WideToUtf8(m_cfg.worldFile)))
             WriteFileBytes(WorldPath(), m_world.data(), m_world.size(), false);  // the network thread: no wait for the disk
     } else if (m_cfg.newGame) {
-        DeleteFileW(WorldPath().c_str());  // an older game's world: partners follow the new one instead
-    } else {
-        LoadWorld(WorldPath(), "world.b");
+        RemoveFile(WorldPath());  // an older game's world: partners follow the new one instead
+        RemoveFile(GameIdPath());
+    } else if (LoadWorld(WorldPath(), "world.b")) {
+        LoadGameId();  // the profiles of the stored world's game from the first join on, not the root folder's
     }
+    m_worldVersion = m_world.empty() ? 0 : 1;
 
     for (size_t i = 0; i < m_players.size(); ++i) m_players[i].id = (uint8_t)i;
-    LOGI("Сервер \"%s\" запущен на порту %u, мест: %d%s", m_cfg.name.c_str(), m_cfg.port, m_cfg.maxPlayers,
-         m_cfg.password.empty() ? "" : ", с паролем");
+    LOGI("Сервер \"%s\" запущен на порту %u, мест: %d%s%s", m_cfg.name.c_str(), m_cfg.port, m_cfg.maxPlayers,
+         m_cfg.password.empty() ? "" : ", с паролем", m_cfg.dedicated ? ", dedicated" : "");
     m_running = true;
     return true;
 }
@@ -99,6 +115,13 @@ void Server::Run() {
             FlushWorldRequests(false);
         }
         if (NowMs() - m_trafficMs >= 30000) ReportTraffic();
+        // dedicated: what only the host's game changes between missions (properties, collectibles, gang wars) reaches the
+        // stored world with a snapshot now and then. Its game answers when it can save: on foot, with no mission on.
+        if (m_cfg.dedicated && m_cfg.snapshotMinutes > 0 && NowMs() - m_snapshotAskedMs >= (uint64_t)(m_cfg.snapshotMinutes * 60000.0f)) {
+            m_snapshotAskedMs = NowMs();
+            if (Player* h = Host(); h && h->status == STATUS_INGAME && MayReplaceWorld(*h) && !m_worldWantedTime)
+                net::Send(h->peer, CH_RELIABLE, Writer(S_WORLD_WANTED));
+        }
         if (NowMs() - m_lastPings > 2000) {
             m_lastPings = NowMs();
             SendPings();
@@ -190,6 +213,7 @@ void Server::Leave(Player& p, LeaveReason why, const std::string& reason) {
     uint8_t id = p.id;
     p = Player{};
     p.id = id;
+    if (m_gameIdOwner == id) m_gameIdOwner = 255;
     m_worldWaiters.erase(std::remove(m_worldWaiters.begin(), m_worldWaiters.end(), id), m_worldWaiters.end());
     if (!wasJoined) return;
     Writer w(S_PLAYER_LEAVE);
@@ -209,7 +233,12 @@ void Server::Leave(Player& p, LeaveReason why, const std::string& reason) {
         en = Format(why == LEAVE_TIMEOUT ? "%s lost connection to the server." : "%s left the game.", name.c_str());
     }
     SendChat(nullptr, kServerId, why == LEAVE_KICKED ? kColorServer : kColorInfo, msg, en);
-    if (wasHost) EnsureHost();
+    if (wasHost) {
+        m_worldWantedTime = 0;  // the one asked for a snapshot is gone
+        m_prologue = false;     // and its new game's prologue with it
+        EnsureHost();
+        ServeWaiters();  // they waited for its world: the next host's, or the stored one
+    }
 }
 
 void Server::OnPacket(ENetPeer* peer, uint8_t channel, const uint8_t* data, size_t size, uint32_t flags) {
@@ -259,7 +288,9 @@ void Server::OnPacket(ENetPeer* peer, uint8_t channel, const uint8_t* data, size
             break;
         case C_GAME_ID: {
             uint32_t game = r.U32();
-            if (r.Ok() && p->isHost) SwitchGame(game);
+            if (!r.Ok()) break;
+            p->claimedGame = game;
+            if (p->isHost && MayNameGame(*p, game)) SwitchGame(game);
             break;
         }
         case C_WORLD_FOLLOW:
@@ -270,7 +301,7 @@ void Server::OnPacket(ENetPeer* peer, uint8_t channel, const uint8_t* data, size
             bool becameInGame = st == STATUS_INGAME && p->status != STATUS_INGAME;
             p->status = st;
             // the host is in a game again (it loaded a save): the partners play the world it left
-            if (becameInGame && p->isHost)
+            if (becameInGame && p->isHost && !m_cfg.dedicated)
                 for (auto& o : m_players)
                     if (o.used && o.joined && !o.isHost && o.status == STATUS_INGAME) o.staleWorld = true;
             // the host just entered the game: partners waiting for a world can get a fresh one
@@ -324,7 +355,17 @@ void Server::HandleHello(Player& p, Reader& r) {
         enet_peer_reset(ghost);
     }
     if (JoinedCount() >= m_cfg.maxPlayers) return reject("на сервере нет свободных мест", "the server is full");
-    if (!m_cfg.password.empty() && h.password != m_cfg.password) return reject("неверный пароль", "wrong password");
+    if (!m_cfg.password.empty()) {
+        uint32_t wait = 0;
+        if (Blocked(p.peer, wait))
+            return reject(Format("слишком много неверных паролей с этого адреса. Следующая попытка через %u с", wait),
+                          Format("too many wrong passwords from this address. The next try is in %u s", wait));
+        if (h.password != m_cfg.password) {
+            WrongPassword(p.peer);
+            return reject("неверный пароль", "wrong password");
+        }
+        RightPassword(p.peer);
+    }
     if (p.id < kMaxPlayers) return Join(p, h, name);
     // in the spare slot: into a slot of its own, the ghost's let go above among them (the games keep one data block per id)
     for (int i = 0; i < kMaxPlayers; ++i) {
@@ -370,6 +411,9 @@ void Server::Join(Player& p, const Hello& h, const std::string& name) {
     wel.sharedLife = m_cfg.sharedLife;
     wel.partnerCheats = m_cfg.partnerCheats;
     wel.worldAvailable = !m_world.empty();
+    wel.dedicated = m_cfg.dedicated;
+    wel.gameId = m_gameId;
+    wel.worldVersion = m_world.empty() ? 0 : m_worldVersion;
     Writer w(S_WELCOME);
     wel.Write(w);
     net::Send(p.peer, CH_RELIABLE, w);
@@ -420,7 +464,7 @@ void Server::HandleCommand(Player* p, const std::string& text) {
         else
             LOGI("%s", msg.c_str());
     };
-    bool admin = !p || p->isHost;
+    bool admin = IsAdmin(p);
 
     if (cmd == "help" || cmd == "?") {
         reply(kColorServer, "Команды: /players, /pm <id> <текст>, /me <действие>",
@@ -428,6 +472,9 @@ void Server::HandleCommand(Player* p, const std::string& text) {
         if (admin)
             reply(kColorServer, "Для хоста: /kick <ник или номер> [причина], /say <текст>, /reloadbalance",
                   "For the host: /kick <nickname or number> [reason], /say <text>, /reloadbalance");
+        if (admin && (m_cfg.dedicated || !m_cfg.admins.empty() || !p))
+            reply(kColorServer, "Для админа: /host <игрок>, /acceptworld [игрок], /restoreworld [номер], /newgame",
+                  "For an admin: /host <player>, /acceptworld [player], /restoreworld [number], /newgame");
         if ((admin || m_cfg.partnerTeleport) && m_cfg.maxPlayers > 2)
             reply(kColorServer, "В игре: /tp <номер> (переместиться к игроку), /tphere <номер> (позвать игрока к себе). Номера видны в окне F2. Игрок отвечает Y или N",
                   "In the game: /tp <number> (go to a player), /tphere <number> (bring a player to you). The F2 window shows the numbers. The player answers Y or N");
@@ -471,6 +518,70 @@ void Server::HandleCommand(Player* p, const std::string& text) {
         Kick(*t, reason);
     } else if (cmd == "say" && admin && !rest.empty()) {
         SendChat(nullptr, kServerId, kColorServer, "[Сервер] " + rest, "[Server] " + rest);
+    } else if (cmd == "admin" && p) {
+        if (m_cfg.adminPassword.empty())
+            return reply(kColorError, "На сервере не задан пароль админа.", "The server has no admin password.");
+        uint32_t wait = 0;
+        if (Blocked(p->peer, wait))
+            return reply(kColorError, Format("Слишком много неверных паролей. Следующая попытка через %u с.", wait),
+                         Format("Too many wrong passwords. The next try is in %u s.", wait));
+        bool listed = m_cfg.admins.empty() || std::find(m_cfg.admins.begin(), m_cfg.admins.end(), ToLower(p->name)) != m_cfg.admins.end();
+        if (!listed || rest != m_cfg.adminPassword) {
+            WrongPassword(p->peer);
+            LOGW("%s: wrong admin password", p->name.c_str());
+            return reply(kColorError, "Неверный пароль админа.", "Wrong admin password.");
+        }
+        RightPassword(p->peer);
+        p->admin = true;
+        LOGI("%s is an admin for this session", p->name.c_str());
+        reply(kColorServer, "Права админа получены.", "Admin rights granted.");
+    } else if (cmd == "host") {
+        if (!admin) return reply(kColorError, "Передать роль хоста может только админ.", "Only an admin can pass the host's role.");
+        Player* t = parts.size() >= 2 ? FindPlayerArg(parts[1]) : nullptr;
+        if (!t) return reply(kColorError, "Укажите игрока: /host <ник или номер>.", "Name the player: /host <nickname or number>.");
+        if (t->isHost) return reply(kColorError, Format("%s уже хост.", t->name.c_str()), Format("%s is the host already.", t->name.c_str()));
+        SetHost(*t);
+    } else if (cmd == "acceptworld") {
+        if (!admin) return reply(kColorError, "Заменить мир сервера может только админ.", "Only an admin can replace the server's world.");
+        Player* t = parts.size() >= 2 ? FindPlayerArg(parts[1]) : Host();
+        if (!t || !t->isHost)
+            return reply(kColorError, "Мир берётся из игры хоста: сначала передайте роль командой /host.",
+                         "The world comes from the host's game: pass the role with /host first.");
+        t->acceptWorldUntil = NowMs() + kAcceptWorldMs;
+        net::Send(t->peer, CH_RELIABLE, Writer(S_WORLD_WANTED));  // its game saves when it can: on foot, with no mission on
+        LOGI("/acceptworld: the next world of %s replaces the stored one", t->name.c_str());
+        reply(kColorServer, Format("Следующее сохранение игры %s заменит мир сервера (в течение 5 минут).", t->name.c_str()),
+              Format("The next save of %s's game replaces the server's world (within 5 minutes).", t->name.c_str()));
+    } else if (cmd == "restoreworld") {
+        if (!admin) return reply(kColorError, "Вернуть прежний мир может только админ.", "Only an admin can restore a world.");
+        int n = parts.size() >= 2 ? atoi(parts[1].c_str()) : 0;
+        if (n < 1 || n > kWorldBackups) {
+            std::string have;
+            for (int i = 1; i <= kWorldBackups; ++i)
+                if (FileExists(BackupPath(i))) have += Format("%s%d", have.empty() ? "" : ", ", i);
+            return reply(kColorInfo, have.empty() ? "Прежних миров нет." : Format("Прежние миры: %s (1: последний). /restoreworld <номер>.", have.c_str()),
+                         have.empty() ? "There are no earlier worlds." : Format("Earlier worlds: %s (1: the latest). /restoreworld <number>.", have.c_str()));
+        }
+        std::vector<uint8_t> data;
+        if (!ReadFileBytes(BackupPath(n), data) || data.size() < 1024)
+            return reply(kColorError, Format("Прежнего мира %d нет.", n), Format("There is no earlier world %d.", n));
+        StoreWorld(std::move(data), Format("backup %d", n));  // the world it replaces becomes backup 1
+        LOGI("/restoreworld %d: the stored world is version %u now", n, m_worldVersion);
+        for (auto& o : m_players)
+            if (o.joined && o.status == STATUS_INGAME && (!o.isHost || m_cfg.dedicated)) SendWorld(o);
+        SendChat(nullptr, kServerId, kColorServer, Format("Админ вернул прежний мир %d.", n), Format("An admin restored earlier world %d.", n));
+    } else if (cmd == "newgame") {
+        if (!admin) return reply(kColorError, "Начать новую историю может только админ.", "Only an admin can start a new story.");
+        ClearWorld();
+        WaitProfileWrites();
+        m_gameId = 0;
+        m_gameIdOwner = 255;
+        SaveGameId();
+        for (auto& o : m_players)
+            if (o.joined && !o.isHost && o.status == STATUS_INGAME) o.staleWorld = true;  // the new world goes to them
+        LOGI("/newgame: the stored world is cleared (kept as backup 1)");
+        SendChat(nullptr, kServerId, kColorServer, "Админ начал новую историю: мир сервера очищен, прежний сохранён. Новым миром станет новая игра хоста.",
+                 "An admin started a new story: the server's world is cleared, the earlier one kept. The host's new game becomes the world.");
     } else if (cmd == "reloadbalance") {
         if (!admin)
             return reply(kColorError, "Перечитать баланс может только хост.", "Only the host can reload the balance.");
@@ -514,12 +625,25 @@ void Server::HandleWorldEnd(Player& p) {
     uint32_t crc = Crc32(p.upload.data(), p.upload.size());
     if (crc != p.uploadCrc) {
         LOGW("Сохранение мира от %s повреждено (crc %08X != %08X)", p.name.c_str(), crc, p.uploadCrc);
+    } else if (!MayReplaceWorld(p)) {
+        // a dedicated server's world is the game (docs/FORK.md): a game that does not play it leaves it alone
+        LOGW("World of %s refused (%s, %u bytes): its game does not play the stored world (version %u, it holds %u)", p.name.c_str(),
+             p.uploadLabel.c_str(), (unsigned)p.upload.size(), m_worldVersion, p.worldVersion);
+        SendChat(&p, kServerId, kColorError,
+                 "Сервер оставил свой мир: эта игра идёт не в нём. Заменить мир миром этой игры может админ: /acceptworld.",
+                 "The server kept its world: this game is not played in it. An admin's /acceptworld replaces it with this game's.");
     } else {
-        m_world.swap(p.upload);
-        m_worldLabel = p.uploadLabel;
-        WriteFileBytes(WorldPath(), m_world.data(), m_world.size(), false);  // the network thread: no wait for the disk
-        LOGI("Хост %s обновил сохранение мира: %s (%u байт)", p.name.c_str(), m_worldLabel.c_str(),
-             (unsigned)m_world.size());
+        // from a game that does not play the stored world (the first world, an admin's /acceptworld): another game's
+        bool another = m_cfg.dedicated && (m_world.empty() || p.worldVersion != m_worldVersion);
+        StoreWorld(std::move(p.upload), p.uploadLabel);
+        p.worldVersion = m_worldVersion;
+        p.acceptWorldUntil = 0;
+        if (another) {
+            m_gameIdOwner = p.id;  // the world is its game's: so is the game's number, said already or yet to come
+            if (MayNameGame(p, p.claimedGame)) SwitchGame(p.claimedGame);
+        }
+        LOGI("Хост %s обновил сохранение мира: %s (%u байт, версия %u)", p.name.c_str(), m_worldLabel.c_str(),
+             (unsigned)m_world.size(), m_worldVersion);
         m_prologue = false;
         // partners who joined after the prologue in a new game of their own switch to the host's world now, and after
         // the host's story progress every partner in the game gets it (it loads at a safe moment)
@@ -541,10 +665,17 @@ void Server::HandleWorldEnd(Player& p) {
 // older game. Partners wait until the prologue lets CJ get on the bike, those playing the old world too, and start the
 // new game with nothing from the old one.
 void Server::HostStartedNewGame() {
+    if (m_cfg.dedicated && !m_world.empty()) {
+        LOGW("The host's game started a new story: the stored world is kept (an admin's /newgame starts a new one)");
+        if (Player* h = Host())
+            SendChat(h, kServerId, kColorError, "Сервер хранит общий мир: новая игра его не заменяет. Новую историю начинает админ: /newgame.",
+                     "The server keeps the shared world: a new game does not replace it. An admin's /newgame starts a new story.");
+        return;
+    }
     if (!m_world.empty()) {
         m_world.clear();
         m_worldLabel.clear();
-        DeleteFileW(WorldPath().c_str());
+        RemoveFile(WorldPath());
         LOGI("Хост начал новую игру: сохранённый мир устарел и удалён");
     }
     m_prologue = true;
@@ -564,9 +695,10 @@ void Server::SwitchGame(uint32_t game) {
     if (game == m_gameId) return;
     WaitProfileWrites();  // the other game's profile queued now would be read back half written
     m_gameId = game;
+    SaveGameId();
     LOGI("Хост играет игру %08X: профили напарников из её папки", game);
     for (auto& o : m_players)
-        if (o.joined && !o.isHost) SendProfile(o);
+        if (o.joined && (!o.isHost || m_cfg.dedicated)) SendProfile(o);
 }
 
 void Server::TellToWait(Player& p) {
@@ -591,11 +723,9 @@ void Server::FollowersJoin() {
 }
 
 void Server::RequestWorld(Player& p) {
-    for (uint8_t id : m_worldWaiters)
-        if (id == p.id) {
-            if (m_prologue) TellToWait(p);  // asked again (reconnected): it still waits
-            return;
-        }
+    // asked again (its load failed, the world came damaged): answered anew, and listed once. It was left unanswered while
+    // it stood in the list, also after the host it waited for had gone.
+    m_worldWaiters.erase(std::remove(m_worldWaiters.begin(), m_worldWaiters.end(), p.id), m_worldWaiters.end());
     if (m_prologue) {  // nothing to load until the prologue is over
         m_worldWaiters.push_back(p.id);
         TellToWait(p);
@@ -617,11 +747,15 @@ void Server::RequestWorld(Player& p) {
     }
     // Nothing to send yet, or a host still in the menu: wait until the host loads a game and uploads it. The world
     // stored here is its last session's, and a partner who took it played another world than the save the host loaded.
-    if (m_world.empty() || host) {
+    // A dedicated server's stored world is the game: it goes out whatever the host does.
+    if (m_world.empty() || (host && !m_cfg.dedicated)) {
         m_worldWaiters.push_back(p.id);
         Writer w(S_WORLD_NONE);
         net::Send(p.peer, CH_BULK, w);
-        SendChat(&p, kServerId, kColorInfo, "Хост ещё не загрузил игру. Ждём...", "The host has not loaded a game yet. Waiting...");
+        if (m_cfg.dedicated && p.isHost)
+            SendChat(&p, kServerId, kColorInfo, "На сервере ещё нет мира.", "The server has no world yet.");
+        else
+            SendChat(&p, kServerId, kColorInfo, "Хост ещё не загрузил игру. Ждём...", "The host has not loaded a game yet. Waiting...");
         return;
     }
     SendWorld(p);
@@ -655,7 +789,9 @@ void Server::SendWorld(Player& p) {
     b.U32((uint32_t)m_world.size());
     b.U32(Crc32(m_world.data(), m_world.size()));
     b.Str(m_worldLabel, 128);
+    b.U32(m_worldVersion);
     net::Send(p.peer, CH_BULK, b);
+    p.worldVersion = m_worldVersion;
     for (size_t off = 0; off < m_world.size(); off += kWorldChunk) {
         size_t n = std::min(kWorldChunk, m_world.size() - off);
         Writer c(S_WORLD_CHUNK);
@@ -743,7 +879,7 @@ void Server::WaitProfileWrites() {
             std::lock_guard<std::mutex> lock(m_writeMutex);
             if (!m_writing) return;
         }
-        Sleep(10);
+        SleepMs(10);
     }
 }
 
@@ -796,21 +932,151 @@ void Server::Kick(Player& p, const std::string& reason, const std::string& reaso
     Leave(p, LEAVE_KICKED, reason);
 }
 
-void Server::EnsureHost() {
+Player* Server::Host() {
     for (auto& o : m_players)
-        if (o.joined && o.isHost) return;
+        if (o.joined && o.isHost) return &o;
+    return nullptr;
+}
+
+// The role goes to who plays the newest world: in the game with the stored world's version, else in the game, and of
+// equals to who has been here longest.
+void Server::EnsureHost() {
+    if (Host()) return;
     if (!m_cfg.hostName.empty()) return;  // the reserved host will take the role when (re)joining
+    Player* best = nullptr;
+    auto rank = [this](const Player& o) {
+        bool inGame = o.status == STATUS_INGAME;
+        return std::make_tuple(inGame && m_worldVersion && o.worldVersion == m_worldVersion, inGame);
+    };
     for (auto& o : m_players) {
         if (!o.joined) continue;
-        o.isHost = true;
-        Writer w(S_HOST_CHANGED);
-        w.U8(o.id);
-        Broadcast(CH_RELIABLE, w);
-        SendChat(nullptr, kServerId, kColorServer, Format("%s теперь хост.", o.name.c_str()),
-                 Format("%s is the host now.", o.name.c_str()));
-        LOGI("Новый хост: %s", o.name.c_str());
+        if (!best || rank(o) > rank(*best) || (rank(o) == rank(*best) && o.connectTime < best->connectTime)) best = &o;
+    }
+    if (best) SetHost(*best);
+}
+
+void Server::SetHost(Player& p) {
+    for (auto& o : m_players) o.isHost = false;
+    p.isHost = true;
+    Writer w(S_HOST_CHANGED);
+    w.U8(p.id);
+    w.U32(m_gameId);
+    Broadcast(CH_RELIABLE, w);
+    SendChat(nullptr, kServerId, kColorServer, Format("%s теперь хост.", p.name.c_str()), Format("%s is the host now.", p.name.c_str()));
+    LOGI("Новый хост: %s", p.name.c_str());
+    // dedicated: a game behind the stored world gets it first (it loads at a safe moment, then leads from it)
+    if (m_cfg.dedicated && !m_world.empty() && p.status == STATUS_INGAME && p.worldVersion != m_worldVersion) SendWorld(p);
+}
+
+// Dedicated: the stored world's game is the one, whoever hosts. A host's game that knows none (0: it plays the world from
+// a copy of it) or names another changes nothing: the game's number comes from the game the world came from, and with
+// no world stored yet from the host's.
+bool Server::MayNameGame(const Player& p, uint32_t game) const {
+    return !m_cfg.dedicated || (game != 0 && (m_world.empty() || p.id == m_gameIdOwner));
+}
+
+bool Server::IsAdmin(const Player* p) const {
+    if (!p || p->admin) return true;  // the console; who gave the admin password
+    bool listed = std::find(m_cfg.admins.begin(), m_cfg.admins.end(), ToLower(p->name)) != m_cfg.admins.end();
+    if (listed && m_cfg.adminPassword.empty()) return true;
+    return !m_cfg.dedicated && p->isHost;  // a game hosted from the F9 window: its host, as before
+}
+
+Player* Server::FindPlayerArg(const std::string& arg) {
+    Player* t = FindByName(arg);
+    if (!t && !arg.empty() && arg.find_first_not_of("0123456789") == std::string::npos) t = FindById(atoi(arg.c_str()));
+    return t && t->joined ? t : nullptr;
+}
+
+// Who waits for the world waited for the host that left or changed: the new host's game is asked, and with none in a
+// game the stored world goes out (they stood in the list for good before, and their next request was dropped).
+void Server::ServeWaiters() {
+    if (m_worldWaiters.empty() || m_prologue) return;
+    Player* host = Host();
+    bool hostWaits = host && std::find(m_worldWaiters.begin(), m_worldWaiters.end(), host->id) != m_worldWaiters.end();
+    if (host && !hostWaits && host->status == STATUS_INGAME) {
+        if (!m_worldWantedTime) {
+            net::Send(host->peer, CH_RELIABLE, Writer(S_WORLD_WANTED));
+            m_worldWantedTime = NowMs();
+        }
         return;
     }
+    if (host && !hostWaits && !m_cfg.dedicated) return;  // a host in the menu: its game's world comes when it loads one
+    FlushWorldRequests(false);
+}
+
+// Outside dedicated mode the host's game is the world. A dedicated server's world is replaced by a game that plays it
+// (it holds the stored version), by the first world, and by the game an admin named (/acceptworld).
+bool Server::MayReplaceWorld(const Player& p) const {
+    return !m_cfg.dedicated || m_world.empty() || p.acceptWorldUntil > NowMs() || p.worldVersion == m_worldVersion;
+}
+
+void Server::RotateBackups() {
+    RemoveFile(BackupPath(kWorldBackups));
+    for (int i = kWorldBackups - 1; i >= 1; --i)
+        if (FileExists(BackupPath(i))) RenameFile(BackupPath(i), BackupPath(i + 1));
+    CopyFileOver(WorldPath(), BackupPath(1));
+}
+
+void Server::StoreWorld(std::vector<uint8_t>&& data, const std::string& label) {
+    bool same = data.size() == m_world.size() && !memcmp(data.data(), m_world.data(), data.size());
+    if (!same && !m_world.empty()) RotateBackups();
+    m_world = std::move(data);
+    m_worldLabel = label;
+    WriteFileBytes(WorldPath(), m_world.data(), m_world.size(), false);  // the network thread: no wait for the disk
+    if (!same || !m_worldVersion) ++m_worldVersion;
+}
+
+void Server::ClearWorld() {
+    if (m_world.empty()) return;
+    RotateBackups();
+    m_world.clear();
+    m_worldLabel.clear();
+    RemoveFile(WorldPath());
+    ++m_worldVersion;
+}
+
+void Server::SaveGameId() {
+    if (!m_gameId) {
+        RemoveFile(GameIdPath());
+        return;
+    }
+    std::string text = Format("%08X", m_gameId);
+    WriteFileBytes(GameIdPath(), text.data(), text.size());
+}
+
+void Server::LoadGameId() {
+    std::vector<uint8_t> bytes;
+    if (!ReadFileBytes(GameIdPath(), bytes) || bytes.empty() || bytes.size() > 16) return;
+    m_gameId = (uint32_t)strtoul(std::string(bytes.begin(), bytes.end()).c_str(), nullptr, 16);
+    if (m_gameId) LOGI("Stored world's game: %08X (its profiles from the first join on)", m_gameId);
+}
+
+bool Server::Blocked(ENetPeer* peer, uint32_t& seconds) {
+    auto it = m_guards.find(peer->address.host);
+    if (it == m_guards.end() || it->second.blockedUntil <= NowMs()) return false;
+    seconds = (uint32_t)((it->second.blockedUntil - NowMs() + 999) / 1000);
+    return true;
+}
+
+void Server::WrongPassword(ENetPeer* peer) {
+    uint64_t now = NowMs();
+    if (m_guards.size() > 2000)  // addresses quiet for a day
+        for (auto it = m_guards.begin(); it != m_guards.end();) it = now - it->second.lastMs > 86400000 ? m_guards.erase(it) : std::next(it);
+    Guard& g = m_guards[peer->address.host];
+    g.lastMs = now;
+    if (++g.fails < kWrongPasswords) return;
+    g.fails = 0;
+    g.blockSeconds = g.blockSeconds ? std::min(g.blockSeconds * 2, kLongestBlockSeconds) : kFirstBlockSeconds;
+    g.blockedUntil = now + (uint64_t)g.blockSeconds * 1000;
+    char ip[64];
+    enet_address_get_host_ip(&peer->address, ip, sizeof(ip));
+    LOGW("%d wrong passwords from %s: it waits %u s", kWrongPasswords, ip, g.blockSeconds);
+}
+
+// a right one ends the count; the length of its last wait is remembered for the next time
+void Server::RightPassword(ENetPeer* peer) {
+    if (auto it = m_guards.find(peer->address.host); it != m_guards.end()) it->second.fails = 0;
 }
 
 void Server::SendPings() {

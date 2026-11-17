@@ -13,3 +13,5 @@ package/** text eol=crlf
 # and the skins' voices (coop/voices: Ogg Vorbis and the lines' packs)
 *.ogg binary
 *.pak binary
+# the dedicated server's files are read on Linux
+deploy/linux/** text eol=lf

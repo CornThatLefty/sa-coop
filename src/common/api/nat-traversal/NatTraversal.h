@@ -59,6 +59,8 @@ struct HttpResponse {
     std::string body;
 };
 // Plain HTTP(S) request through WinHTTP. `url` = http(s)://host[:port]/path
+// The Linux build (the dedicated server) has no HTTP, no signalling channel and no UPnP: the request answers with
+// status 0, a subscription hears nothing, a mapping fails.
 HttpResponse HttpRequest(const std::string& method, const std::string& url, const std::string& body = "",
                          const std::string& headers = "", int timeoutMs = 5000);
 
@@ -76,7 +78,9 @@ private:
     std::atomic<void*> m_request{nullptr};  // the open stream, closed by Stop() to end a blocking read
     std::string m_url;
     std::function<void(const std::string&)> m_cb;
+#ifdef _WIN32
     static unsigned long __stdcall ThreadProc(void* self);
+#endif
 };
 
 bool SignalPublish(const std::string& baseUrl, const std::string& topic, const std::string& message);

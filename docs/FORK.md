@@ -14,6 +14,8 @@ All players and the server must run the same fork build: the protocol version di
 - [Payouts](#payouts)
 - [Name tags switch](#name-tags-switch)
 - [Server additions](#server-additions)
+- [Dedicated mode](#dedicated-mode)
+- [Linux server](#linux-server)
 - [Tests without the game](#tests-without-the-game)
 - [Engine addresses added by the fork](#engine-addresses-added-by-the-fork)
 - [Fixes to inherited behaviour](#fixes-to-inherited-behaviour)
@@ -199,11 +201,106 @@ The setting is each player's own: it changes what that player's game draws and i
 
 ## Server additions
 
+These apply to every server, a game hosted from the F9 window included.
+
 | Addition | Use |
 | --- | --- |
 | `[balance]` in `server.ini`, `balance_exclude.ini` | See above |
-| `/reloadbalance` (host or console) | Re-reads both files and sends them to every player |
+| `/reloadbalance` (host, admin or console) | Re-reads both files and sends them to every player |
 | `bind =` in `[server]`, `--bind <address>` | Address to listen on; empty listens on every address |
+| World backups | The world a new upload replaces is kept: `world\world.b.1` (latest) to `world.b.10` |
+| `/restoreworld [number]` (admin) | Without a number lists the backups; with one, makes that backup the world and sends it to the players in the game. The world it replaces becomes backup 1 |
+| Game id kept over a restart | `world\game.id` holds the id of the stored world's game, so partners get that game's profiles from their first join after a restart |
+| World waiters | A partner waiting for the world is answered when the host leaves or changes: the new host's game is asked, or the stored world is sent. A repeated request is answered each time |
+| Host choice | When the host leaves, the role goes to a player in the game holding the stored world's version, then to any player in the game, then to the longest connected |
+| Password cooldown | After 5 wrong passwords an address waits 60 s; each further block doubles, up to 1 hour. Covers the server password and `/admin` |
+| `admins =`, `admin_password =` in `[server]` | Named admins, see below |
+| `/host <player>` (admin) | Gives the host role to that player |
+
+**Admins.** The server console is always an admin. `admins = Alice, Bob` names admins by nickname. With no
+`admin_password`, a named nickname is an admin as soon as it joins, so anyone who takes the nickname is one: set a
+password on a server open to strangers. With `admin_password` set, a named player types `/admin <password>` once per
+session; with a password and an empty `admins` list, any player who knows the password can. On a server hosted from
+the F9 window the host is an admin too, as before.
+
+**Wire additions** (protocol 64, appended fields that an older fork build skips): `S_WELCOME` carries `dedicated`, the
+game id and the world version; `S_WORLD_BEGIN` the world version; `S_HOST_CHANGED` the game id.
+
+## Dedicated mode
+
+`dedicated = 1` in `[server]` (or `--dedicated`) is for a server that runs on its own, with no host's game beside it.
+The world it stores is the game, whoever hosts.
+
+The client side of this (joining a dedicated server as host, profiles for the host, moving the host role without a
+reload) is not built yet. Until it is, `dedicated = 1` is for server tests; games hosted from the F9 window run with
+`dedicated = 0` and behave as before apart from the table above.
+
+| Rule in dedicated mode | Detail |
+| --- | --- |
+| World lock | An upload replaces the world only when the server has no world, when the uploading game holds the stored world's version (it received that world from the server, or uploaded it), or within 5 minutes of an admin's `/acceptworld` for that player. Anything else is refused and the uploader is told in the chat |
+| World version | Counts up with every world that replaces the stored one. A player holds the version last sent to it or uploaded by it |
+| `/acceptworld [player]` (admin) | Lets the host's next upload replace the world, and asks its game for a snapshot. The player must be the host |
+| `/newgame` (admin) | Clears the stored world (kept as backup 1) and the game id. The host's next upload becomes the world. A host's game starting a new story on its own does not clear the world |
+| `--world <file>` | Seeds a server that has no world. Ignored, with a log line, when a world is stored |
+| Stored world while the host is in the menu | Sent to a partner at once; outside dedicated mode a partner waits for the host's game |
+| Game id | Named by the game the world came from: the first host's on an empty server, or the game accepted by `/acceptworld`. A later host's game cannot change it, with 0 or with another id |
+| New host behind the world | A player made host while holding an older version is sent the stored world |
+| `snapshot_minutes` (preset 5, 0 off) | The server asks the host's game for a snapshot that often, when the host is in the game and holds the stored version. The game answers when it can save. Fractions are allowed |
+| Rights | The host role gives no admin rights |
+
+After `/restoreworld` the game id is kept: a backup from another game needs `/newgame` or `/acceptworld` instead.
+
+## Linux server
+
+`coop-server` builds and runs on x86-64 Linux. It is the same program as `coop-server.exe`: one `Server.cpp`, one
+protocol, the same `server.ini`, console commands and data files.
+
+```
+python tools/build.py              # build/release/bin/coop-server (g++ 12 or later; CC and CXX name another compiler)
+python tools/build.py testclient   # the headless player of tools/test_server.py
+python tools/build.py dist         # dist/coop-server-linux-x86_64.tar.gz
+```
+
+The `linux` job of `.github/workflows/build.yml` does all three on Ubuntu 22.04 with g++ 12, runs
+`tools/test_server.py` against the Linux binary, and keeps the archive as an artifact. A tagged release carries it as
+a fourth file. The C++ library is linked into the program, so it needs only glibc 2.35 or later (Ubuntu 22.04,
+Debian 12 and newer).
+
+The archive holds `coop-server`, `server.ini` with every key at its preset (`deploy/linux/server.ini` plus the
+`[balance]` section the server writes itself), `balance_exclude.ini`, the systemd unit `sa-coop.service` and
+`README.md` with the install steps, the port to open (7788/UDP) and the data folder's layout, and
+`egg-sa-coop-server.json`, an egg for a Pelican panel that installs a release from GitHub. Source: `deploy/linux`.
+The server logs `Server ready on UDP port N` once it listens: the line the egg waits for.
+
+**How the code is shared.** Each Windows-only piece has a Linux half behind `#ifdef _WIN32` in the same file:
+
+| Piece | File | Windows | Linux |
+| --- | --- | --- | --- |
+| UTF-8 and wide text | `common/lib/util/Util.cpp` | `MultiByteToWideChar` | A UTF-8 codec; `wchar_t` holds a whole code point |
+| Clock | same | `QueryPerformanceCounter` | `clock_gettime(CLOCK_MONOTONIC)` |
+| Files | same | `CreateFileW`, `MoveFileExW`, `FlushFileBuffers` | `open`, `rename`, `fsync` |
+| Lowercase | same | `CharLowerBuffW` | Latin, Latin-1 and Cyrillic by table |
+| Log file and time | `common/lib/log/Log.cpp` | `_wfopen`, `GetLocalTime`, UTF-8 BOM | `fopen`, `localtime_r`, no BOM |
+| Entry point | `server/app/entry/main.cpp` | `wmain`, console control handler, `ReadConsoleW`, `LOCALAPPDATA` fallback | `main`, `SIGINT` and `SIGTERM`, lines of stdin, exit with a message when the data folder cannot be written |
+| Sockets outside ENet | `common/api/nat-traversal/NatTraversal.cpp` | Winsock | BSD sockets |
+| ENet | `third_party/enet` | `win32.c` | `unix.c` |
+
+New in `Util.h` for both systems: `RemoveFile`, `RenameFile`, `CopyFileOver`, `SleepMs`, `NativePath`. `Server.cpp`
+calls these instead of `DeleteFileW`, `Sleep` and `std::filesystem`.
+
+**Paths (deviation from the spec).** The spec names `std::filesystem::path` for the server's paths. They stay
+`std::wstring` joined with backslashes (`world\world.b` after the data folder), and `NativePath` turns the
+backslashes into slashes at the system calls on Linux. `Server.cpp`'s path code is then one text for both systems
+and the Windows build's behaviour does not change. A file name cannot hold a backslash of its own: nicknames are
+sanitized to letters, digits and `_-.[]`.
+
+**Left out of the Linux build:** UPnP, the signalling channel, NAT hole punching and the TURN relay (WinHTTP and
+BCrypt code). They get a home computer through its router. `turn =` is ignored with a warning. **Kept:** STUN through
+the game socket and the invite code, written to `server-data/invite.txt`.
+
+**State.** Compiled and tested only in CI: the 22 server tests pass against the Linux binary there. No game has
+connected to it, and the egg has not been imported into a panel. `dedicated = 1` still waits for the client side (see [Dedicated mode](#dedicated-mode)); with
+`dedicated = 0` the first player in the game is the host, as on any server started outside the F9 window.
 
 ## Tests without the game
 
@@ -212,17 +309,25 @@ python tools/build.py server testclient
 python tools/test_server.py
 ```
 
+The same two commands work on Linux, and CI runs them on both systems.
+
 `coop-test-client` (`tools/test-client`) is a headless player: it joins a server, prints each service message as a
 line and takes commands on stdin. `tools/test_server.py` starts a server per test in a temporary folder, bound to
 127.0.0.1 with `internet = 0`, and checks the exchange. Add `-v` for the full output or a word to filter tests by name.
 
+Covered: balance files and `/reloadbalance`, protocol mismatch, host role on join and leave, world upload and
+download, profiles per game, game id over a restart, waiters when the host leaves, repeated world requests, password
+cooldown, the dedicated world lock, seeding, `/acceptworld`, `/restoreworld`, `/newgame`, `/host`, `/kick` rights,
+host choice by world version, and scheduled snapshot requests.
+
 ## Engine addresses added by the fork
 
-All for `gta_sa.exe` 1.0 US, taken from gta-reversed and checked in the executable's disassembly.
+All for `gta_sa.exe` 1.0 US, taken from gta-reversed and checked in the executable's disassembly with
+`tools/re/exe.py` (set `GTA_SA_EXE` to the executable's path; it needs the `capstone` Python package).
 
 | Address | What | Checked by |
 | --- | --- | --- |
-| `0x49AD50` | `CShopping::GetPrice(key)`, cdecl | Its body reads `ms_numPrices` and `ms_prices`; `CShopping::Buy` calls it at `0x49C000` |
+| `0x49AD50` | `CShopping::GetPrice(key)`, cdecl | Its body reads `ms_numPrices` and `ms_prices`; called from `CShopping::Buy` at `0x49C000` and from the script command at `0x46EBBE`, nowhere else |
 | `0xA9A7C8` | `CShopping::ms_priceSectionLoaded` | Written by `LoadPrices` and `RemoveLoadedPrices` |
 | key 48 | `WEAPON_ARMOUR` as a `Weapons` item | `cmp esi, 0x30` in `CShopping::Buy` at `0x49C20D` |
 | `0x610770` | `CPopCycle::UpdatePercentages()`, cdecl, no arguments | Called once from `CPopCycle::Update` at `0x610CAB` |
@@ -255,8 +360,9 @@ not what the wallet gained. Found in a tester's `coop.log`: `Mission reward: $21
 
 ## Release files
 
-Upstream ships one archive of about 515 MB. `python tools/build.py dist` in the fork writes three files, and a tagged
-release carries all three:
+Upstream ships one archive of about 515 MB. `python tools/build.py dist` in the fork writes three files on Windows.
+A tagged release carries all three, and the Linux server's archive (`coop-server-linux-x86_64.tar.gz`,
+see [Linux server](#linux-server)) as a fourth:
 
 | File | Contents |
 | --- | --- |

@@ -1,0 +1,64 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PANEL",
+    "meta": {
+        "version": "PLCN_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-11-17T00:00:00+00:00",
+    "name": "SA:COOP Server",
+    "author": "sa-coop-fork@users.noreply.github.com",
+    "uuid": "f8fccde7-5819-4138-85ef-447e40bad86b",
+    "description": "Dedicated server of the SA:COOP fork (GTA San Andreas co-op). One UDP port. Settings in server.ini, data in server-data.",
+    "tags": [
+        "gta-sa"
+    ],
+    "features": [],
+    "docker_images": {
+        "Debian": "ghcr.io/pelican-eggs/yolks:debian"
+    },
+    "file_denylist": [],
+    "startup": "./coop-server --port {{SERVER_PORT}}",
+    "config": {
+        "files": "{}",
+        "startup": "{\n    \"done\": \"Server ready on UDP port\"\n}",
+        "logs": "{}",
+        "stop": "quit"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\n# SA:COOP dedicated server: the release's Linux archive into /mnt/server.\n# A reinstall replaces the program and keeps server.ini, balance_exclude.ini and server-data.\nset -e\napt-get update -y\napt-get install -y curl ca-certificates tar\nmkdir -p /mnt/server /tmp/sa-coop\ncd /tmp/sa-coop\ncurl -fsSL -o server.tar.gz \"https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/coop-server-linux-x86_64.tar.gz\"\ntar -xzf server.tar.gz --strip-components=1\ncp coop-server /mnt/server/coop-server\nchmod +x /mnt/server/coop-server\nfor f in server.ini balance_exclude.ini; do\n    [ -f \"/mnt/server/$f\" ] || cp \"$f\" \"/mnt/server/$f\"\ndone\ncp README.md /mnt/server/README.md\necho \"SA:COOP server ${VERSION} installed\"\n",
+            "container": "ghcr.io/pelican-eggs/installers:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "sort": 1,
+            "name": "Release",
+            "description": "Release tag of the fork to install, as on its releases page.",
+            "env_variable": "VERSION",
+            "default_value": "v0.3.4-fork.5",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": [
+                "required",
+                "string",
+                "max:40"
+            ]
+        },
+        {
+            "sort": 2,
+            "name": "Repository",
+            "description": "GitHub repository the release comes from, as owner/name.",
+            "env_variable": "GITHUB_REPO",
+            "default_value": "CornThatLefty/sa-coop",
+            "user_viewable": true,
+            "user_editable": false,
+            "rules": [
+                "required",
+                "string",
+                "max:80"
+            ]
+        }
+    ]
+}
