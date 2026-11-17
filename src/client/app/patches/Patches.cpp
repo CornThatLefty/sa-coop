@@ -856,6 +856,51 @@ bool FreeIfDead(void* o) {
     return true;
 }
 
+// A person's hold task (CTaskSimpleHoldEntity and its pick up and put down: one ProcessPed, 0x693C40) with a destroyed
+// thing for what it holds: its first step called the thing's SetIsStatic through that table (0x693D72), which has one
+// function: the call read the text behind it ("PedA", 0x41646550) as an address, and the game stopped 13 bytes on,
+// at 0x4164655D (a player's crash in test build 9, 17.11). What is held is gone: the task ends as it does when it
+// holds nothing.
+using HoldStepFn = bool(__fastcall*)(void*, void*, game::CPed*);
+HoldStepFn g_origHoldStep = nullptr;
+bool __fastcall HookHoldStep(void* task, void* edx, game::CPed* ped) {
+    if (void* held = game::Field<void*>(task, 0x08); held && game::Field<uintptr_t>(held, 0) == 0x863C40) {  // m_pEntityToHold
+        static int told = 0;
+        if (told++ < 5)
+            LOGW("A ped (model %d) held a destroyed object (model %d): it lets go", ped ? ped->ModelIndex() : -1,
+                 game::Field<int16_t>(held, 0x22));
+        game::Field<void*>(task, 0x08) = nullptr;
+        FreeIfDead(held);
+    }
+    return g_origHoldStep(task, edx, ped);
+}
+
+// The engine notes who points at an entity (a task's target, a car's driver, what a ped holds) in list nodes, and
+// clears those pointers when the entity is deleted. It has 3000 nodes (CReferences::aRefs, 0xB9B9A8), the free ones on
+// a list (pEmptyList, 0xBA1768). With none free, CEntity::RegisterReference (0x571B70) prunes every ped's, vehicle's
+// and object's list and then notes nothing: that pointer stays when its entity goes. 3000 are enough for the game's own
+// 140 people and 110 vehicles; a limit adjuster's pools with the streets' wider range and numbers (features/balance/
+// Streets.cpp) hold several times as many. Only Init (0x5719B0) knows the array, everything else goes through the
+// list: more nodes of ours go on it after Init.
+struct RefNode {
+    RefNode* next;
+    void** entity;
+};
+constexpr int kExtraRefs = 27000;
+RefNode* g_extraRefs = nullptr;
+void LinkExtraRefs() {
+    if (!g_extraRefs) g_extraRefs = new RefNode[kExtraRefs];
+    RefNode*& empty = game::Ref<RefNode*>(0xBA1768);
+    for (int i = 0; i < kExtraRefs; ++i) g_extraRefs[i] = {i + 1 < kExtraRefs ? &g_extraRefs[i + 1] : empty, nullptr};
+    empty = g_extraRefs;
+    LOGI("Entity references: %d more than the game's 3000", kExtraRefs);
+}
+VoidFn g_origRefsInit = nullptr;
+void __cdecl HookRefsInit() {  // CReferences::Init: every node is free again, ours with them
+    g_origRefsInit();
+    LinkExtraRefs();
+}
+
 using ManageObjectFn = void(__cdecl*)(void*, const game::CVector&);
 ManageObjectFn g_origManageObject = nullptr;
 void __cdecl HookManageObject(void* object, const game::CVector& centre) {
@@ -1060,6 +1105,9 @@ void Apply() {
     g_origObjectDelete = (ObjectDeleteFn)mem::SwapVTable((void**)0x866F60, 0, (void*)&HookObjectDelete);  // CObject's vtable
     mem::HookFn(0x615DC0, &HookManageObject, &g_origManageObject, "CPopulation::ManageObject");
     mem::HookFn(0x5A1910, &HookDeleteAllMissionObjects, &g_origDeleteMissionObjects, "CObject::DeleteAllMissionObjects");
+    mem::HookFn(0x693C40, &HookHoldStep, &g_origHoldStep, "CTaskSimpleHoldEntity::ProcessPed");
+    mem::HookFn(0x5719B0, &HookRefsInit, &g_origRefsInit, "CReferences::Init");
+    if (game::Ref<void*>(0xBA1768)) LinkExtraRefs();  // the game set its list up before us
     mem::HookFn(0x4CF190, &HookForAllFrames, &g_origForAllFrames, "CAnimBlendClumpData::ForAllFrames");
     mem::RedirectCallFn(0x5E92C8, &HookPlayFootSteps, &g_origPlayFootSteps);  // CPed::ProcessControl
     // through the tasks' tables, as the task manager calls them: scripts and SetPedInCarDirect call them straight with a car

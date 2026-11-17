@@ -80,6 +80,22 @@ void CheckColModels() {
     LOGI("Col models: %d of %d", used, pool->size);
 }
 
+// The free nodes of the engine's entity references (CReferences::pEmptyList, 0xBA1768; app/patches: the game's 3000
+// and ours). With none left a deleted entity's pointers are not cleared, and nothing told how near that was: the log
+// has the lowest number of free ones as it falls.
+uint64_t g_refCheckMs = 0;
+int g_refTold = 0x7FFFFFFF;
+void CheckEntityRefs() {
+    if (NowMs() - g_refCheckMs < 10000) return;
+    g_refCheckMs = NowMs();
+    int free = 0;
+    for (void* n = game::Ref<void*>(0xBA1768); n && free < 200000; n = game::Field<void*>(n, 0)) ++free;
+    if (free > g_refTold - 2000 && !(free < 1000 && g_refTold >= 1000)) return;
+    g_refTold = free;
+    if (free < 1000) LOGW("Entity references: %d free", free);
+    else LOGI("Entity references: %d free", free);
+}
+
 // A cutscene starts only when every one of its models is in memory (CCutsceneMgr::LoadCutsceneData_loading looks each
 // frame and waits). A model that never comes holds the mission on its black screen for good while the game runs (27.10:
 // a host's cutscenes stayed black, and its pause map and the range's marker, which wait for models too, never came).
@@ -144,6 +160,7 @@ public:
         if (!core::IsPlayerReady()) return;
         CheckScripts();
         CheckColModels();
+        CheckEntityRefs();
         CheckCutsceneLoad();
         CheckPauseMenu();
     }

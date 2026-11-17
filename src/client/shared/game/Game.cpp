@@ -33,7 +33,8 @@ static bool IsInPool(CPoolHeader* pool, void* p, int elemSize) {
 
 bool IsPedValid(CPed* ped) { return IsInPool(PedPool(), ped, kPedPoolElemSize); }
 bool IsVehicleValid(CVehicle* v) { return IsInPool(VehiclePool(), v, kVehiclePoolElemSize); }
-bool IsObjectValid(CObject* o) { return IsInPool(ObjectPool(), o, kObjectPoolElemSize); }
+// a destroyed object left in its slot has the table its destructors leave, CPlaceable's (app/patches, FreeIfDead)
+bool IsObjectValid(CObject* o) { return IsInPool(ObjectPool(), o, kObjectPoolElemSize) && Field<uintptr_t>(o, 0) != 0x863C40; }
 
 bool HasRoom(CPoolHeader* pool, int keep, const char* what) {
     if (!pool) return false;

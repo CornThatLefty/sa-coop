@@ -276,6 +276,7 @@ def streets_settings_reach_every_game(make):
     check("spawn_scale = 1.0" in text and "ped_density = 1.0" in text and "car_density = 1.0" in text, "the presets are not in server.ini")
     b = s.join("Alice").balance()
     check(near(b["spawn_scale"], 1) and near(b["ped_density"], 1) and near(b["car_density"], 1), f"the presets: {b}")
+    check(near(b["sync_handover"], 1), f"the hand-over is not on by its preset: {b}")
 
     s = make("[balance]\nspawn_scale = 3\nped_density = 1.5\ncar_density = 0\n")
     a = s.join("Alice")
@@ -288,6 +289,9 @@ def streets_settings_reach_every_game(make):
     for p in (a, bob):
         check(near(p.balance()["spawn_scale"], 1.5), f"{p.name}: the range after the change")
     check(re.search(r"(?m)^spawn_scale = 1.5", s.ini.read_text(encoding="utf-8")), "server.ini has the range")
+    a.send("set balance sync_handover 0")
+    for p in (a, bob):
+        check(near(p.balance()["sync_handover"], 0), f"{p.name}: the hand-over switched off")
     a.send("set balance spawn_scale 2.5")
     a.expect(r"EVT CHAT from=255 Setting spawn_scale: not a value")
     a.send("settings")

@@ -928,11 +928,12 @@ bool Peds::QueueGiveAway(CPed* ped, uint8_t to, bool noGround) {
     if (!np || np->owner != Net().MyId() || ped->InVehicle() || ped->CreatedBy() != 1 /* PED_GAME */ || IsPedDead(ped) ||
         !CanGiveAwayType(*np, to) || !CallMethod<0x5DF100, bool>(ped) || (!noGround && CallMethod<0x534540, bool>(ped)))  // CanBeDeleted, GetIsOnScreen
         return false;
-    // one busy with a threat (fighting, shooting at, fleeing from someone) stays with its game while that has ground:
-    // handed over, it turned into a calm stroller in the middle of its fight
-    if (!noGround)
-        for (int task : {1000, 1001, 1002, 909, 911, 927})  // kill ped on foot (3), flee entity, smart flee entity, flee any means
-            if (FindTask(ped, task)) return false;
+    // One busy with a threat (fighting, shooting at, fleeing from someone; a cop arresting, pursuing or after a
+    // criminal) stays with its game: handed over, it is a new person of the other game, a calm stroller in the middle of
+    // its fight. Past this game's ground too (till test build 9 it went then): with the streets' wider range every
+    // hand-over is past it, and a cop after a player lost its target (17.11).
+    for (int task : {1000, 1001, 1002, 909, 911, 927, 1101, 1103, 1105})  // kill ped on foot (3), flee entity, smart flee entity,
+        if (FindTask(ped, task)) return false;                            // flee any means, arrest ped, police pursuit, kill criminal
     m_giveAway[ped] = to;
     return true;
 }

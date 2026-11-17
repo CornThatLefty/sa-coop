@@ -71,6 +71,7 @@ std::string NameOf(const Setting& s) {
     if (k == "payout_share") return TR("Доля при scaled", "Share in scaled mode");
     if (k == "sync_driver_leads") return TR("Прохожих и трафик создаёт игра водителя", "Driver's game spawns people and traffic");
     if (k == "sync_instant_hits") return TR("Попадания по чужим людям видны сразу", "Hits on other games' people show at once");
+    if (k == "sync_handover") return TR("Люди и машины переходят к игре ближнего игрока", "People and cars pass to the nearer player's game");
     if (k == "spawn_scale") return TR("Дальность людей и машин", "People and traffic range");
     if (k == "ped_density") return TR("Плотность людей", "People density");
     if (k == "car_density") return TR("Плотность машин", "Traffic density");

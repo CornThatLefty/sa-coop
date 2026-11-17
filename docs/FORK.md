@@ -71,6 +71,7 @@ player in the menu or loading is not counted. For a story mission's people, `n` 
 | `spawn_scale` | 1.0 | 1.0 | 1–2 | How many times farther out people and traffic are made and removed. See [Wider streets](#wider-streets) |
 | `ped_density` | 1.0 | 1.0 | 0–4 | Number of people on the streets |
 | `car_density` | 1.0 | 1.0 | 0–4 | Number of cars in traffic |
+| `sync_handover` | 1 | 1 | 0 or 1 | A passer-by or car far from its game's player goes to the game of the player nearer it. See [Ownership](#ownership-of-people-and-cars) |
 
 "Preset" is what the server uses when `server.ini` does not set the key. "Neutral" is the unmodified game.
 
@@ -323,6 +324,20 @@ people have proofs and health the copy does not know. `HitCopyHere`, `HookKillPe
 Not run in a game by the author: whether a copy plays the game's flinch for a non-lethal shot depends on the
 engine's damage response for a person with the copies' empty decision maker, which was not checked.
 
+**`sync_handover`: people and cars pass to the nearer player's game.** A passer-by more than 60 m from its game's
+player and 30 m nearer another player goes to that player's game; a car likewise (other player within 140 m, 40 m
+nearer). The receiving game makes it its own: a new person or car in the same place, with the game's own behaviour
+for its kind. What it was doing is not carried over. On (1) is the behaviour of every earlier build. Off (0): nothing
+passes by distance; a person or car stays its game's while another player is next to it or sees it, and goes when
+the engine removes it. A street then thins around a player whose partner walked away or entered a building. A Grove
+member asked to join and a hooker by a stopped car still pass.
+
+A person busy with a threat never passes (test build 10): fighting, shooting at or fleeing from someone, and a cop
+arresting, pursuing or after a criminal (tasks 1000–1002, 909, 911, 927, 1101, 1103, 1105). Earlier builds passed
+such a person once it was 100 m from its game's player, where that game may have no ground loaded; with
+`spawn_scale` above 1.6 every hand-over is past 100 m, so every fight was cut short and a cop after a player lost
+its target. `Peds::QueueGiveAway` in `src/client/entities/ped/Peds.cpp`, `Handover` in `Population.cpp`.
+
 Planned next: a person changing owner in place (the same person and number, only the owner changes) with a claim by
 the last player to hit it, then a claim by the nearest player as the weakest rule, with a margin and a hold so that
 people do not flip between two players standing together.
@@ -392,8 +407,11 @@ collision about 120 m around its player whatever the range.
 
 **Limits**
 
-- Ground is loaded about 120 m around a player. People made past it stand still until the player comes nearer;
-  traffic drives on its road nodes and is not affected.
+- A collision file is loaded while the player is inside its box widened by 120 m, so ground can end 120 m from a
+  player. What a person does past it was not checked in a game. Traffic drives on its road nodes and is not affected.
+- The engine has 3000 nodes for noting who points at an entity, and with none free a deleted entity's pointers stay
+  (see [Fixes](#fixes-to-inherited-behaviour), test build 10). The mod adds 27000. `coop.log` has
+  `Entity references: N free` as the number falls.
 - Road nodes are loaded 350 m around a player. That is why `spawn_scale` stops at 2.
 - The engine finds a new car's spot by walking road links out from the player: at most 230 m of links (multiplied by
   `spawn_scale` by the mod) and at most 30 nodes (not changed). Where nodes stand close together, a range near 2
@@ -559,6 +577,10 @@ All for `gta_sa.exe` 1.0 US, taken from gta-reversed and checked in the executab
 | `0xC0BC30`–`0xC0BC3C` | `CPopCycle::m_NumOther_Cars`, `m_NumCops_Cars`, `m_NumGangs_Cars`, `m_NumDealers_Cars` (float) | Summed by `GenerateOneRandomCar` at `0x43013D`–`0x43014F` |
 | `0x434224` | The 45 of `cmp eax, 45` in `CCarCtrl::GenerateRandomCars` (random cars at most) | Bytes `83 F8 2D` at `0x434222`, after `mov eax, [NumRandomCars]` |
 | `0x4244F6` | Operand of `fcomp [0x858F80]` (230.0) in `CCarCtrl::GenerateCarCreationCoors2`: the road walk's length | Bytes `D8 1D 80 8F 85 00` at `0x4244F4`; the walked length is added at `0x424B26` |
+| `0x693C40` | `CTaskSimpleHoldEntity::ProcessPed(CPed*)`, thiscall; `m_pEntityToHold` at `+0x08` | Reads `[esi+8]`, tests its type for 4 (object) and calls its `SetIsStatic` at `0x693D52`–`0x693D72`: the crash's return address `0x693D75` |
+| `0x863C40` | `CPlaceable`'s vtable (one function, `0x54F5D0`) | The dword at `+0x10` is the text `PedA` (`0x41646550`); the crash stopped 13 bytes past that address |
+| `0x5719B0` | `CReferences::Init()`, cdecl | Sets `pEmptyList` (`0xBA1768`) to `aRefs` (`0xB9B9A8`) and links 3000 nodes of 8 bytes; the array's only two references are in it |
+| `0xBA1768` | `CReferences::pEmptyList` | 12 references, all in `Init`, `RegisterReference` and the lists' clean-up (`0x571A26`–`0x571C9B`) |
 
 No address is marked `TODO(verify)`.
 
@@ -581,6 +603,25 @@ Found from a tester's `crash.log`; not reproduced by the author. Upstream has th
 **Picked-up cash shared as a reward (test build 3).** See [Payouts](#payouts): the reward is now what the script pays,
 not what the wallet gained. Found in a tester's `coop.log`: `Mission reward: $21`, `$141` and `$58` after `drugs3`,
 `drugs1` and `music3`, three missions that pay no money.
+
+**A person holding a destroyed object (test build 10).** A player's game crashed at `0x4164655D` (test build 9,
+17.11). The return addresses give `CTaskSimpleHoldEntity::ProcessPed` (`0x693D72`): a passer-by's hold task called
+`SetIsStatic` on what it held, and that was an object already destroyed, with the table its destructors leave
+(`CPlaceable`'s, one function). The call read the text behind that table as an address (`0x41646550`) and the game
+stopped 13 bytes on. Three changes:
+
+- The hold task's step looks at what it holds first: a destroyed object is let go and the task ends as it does with
+  nothing held. `coop.log` gets `A ped (model N) held a destroyed object`.
+- `IsObjectValid` no longer counts a destroyed object left in its pool slot as an object, so the mod hangs none on a
+  person's copy.
+- The engine notes who points at an entity in 3000 list nodes and clears those pointers when the entity is deleted.
+  With no node free it notes nothing, and the pointer stays. The game's own pools stay within 3000; bigger pools with
+  the wider streets of test build 9 hold several times as many people and cars. The mod adds 27000 nodes to the
+  free list after `CReferences::Init`.
+
+Which of the two left the pointer (a destroyed object kept in its slot, or the reference list run out) is not known:
+only the crash log was at hand. `HookHoldStep`, `LinkExtraRefs` in `src/client/app/patches/Patches.cpp`,
+`CheckEntityRefs` in `Diag.cpp`.
 
 ## Release files
 

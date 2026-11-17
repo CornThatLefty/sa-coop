@@ -160,7 +160,9 @@ void WriteBalanceDefaults(const std::wstring& serverIni) {
             "; People and traffic: how many times farther out the game makes and removes them (1 to 2), and how many.\r\n"
             "spawn_scale = 1.0\r\n"
             "ped_density = 1.0\r\n"
-            "car_density = 1.0\r\n";
+            "car_density = 1.0\r\n"
+            "; A passer-by or car far from its game's player goes to the game of the player nearer it (1) or stays (0).\r\n"
+            "sync_handover = 1\r\n";
         if (WriteFileBytes(serverIni, text.data(), text.size())) LOGI("server.ini: the [balance] section added with its presets");
     }
     std::wstring exclude = BalanceExcludePath(serverIni);
