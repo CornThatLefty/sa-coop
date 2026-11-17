@@ -38,6 +38,9 @@ struct Config {
     std::vector<std::string> admins;  // nicknames, lower case
     std::string adminPassword;        // set: an admin says it once a session (/admin <password>)
     float snapshotMinutes = 5.0f;     // dedicated: the host's game is asked for the world that often (0: never)
+    // A replaced world is kept as a backup when the last backup is that old, and at every passed mission ("progress").
+    // 0: every replaced world. Snapshots come every few minutes: one backup each would leave ten backups an hour deep.
+    float backupMinutes = 30.0f;
     bool internet = true;    // UPnP + STUN + invite code + hole punching
     std::string turn;        // optional TURN relay for friends behind any NAT (see TurnRelay)
 };
@@ -171,6 +174,7 @@ private:
     // /acceptworld): its game names the world's game (C_GAME_ID). 255: none; a server with no world takes its host's.
     uint8_t m_gameIdOwner = 255;
     uint64_t m_snapshotAskedMs = 0;        // dedicated: the host's game was last asked for a scheduled snapshot
+    uint64_t m_backupMs = 0;               // when a replaced world was last kept as a backup (0: not yet in this run)
     struct Guard {
         int fails = 0;
         uint32_t blockSeconds = 0;  // the last wait

@@ -40,6 +40,7 @@ const Def kServerDefs[] = {
     {"admins", SK_TEXT, 0, 0, 0, true},
     {"admin_password", SK_SECRET, 0, 0, 0, true},
     {"snapshot_minutes", SK_FLOAT, 0, 1440, 0, false},
+    {"backup_minutes", SK_FLOAT, 0, 1440, 0, false},
     {"dedicated", SK_BOOL, 0, 1, SF_RESTART, false},
     {"internet", SK_BOOL, 0, 1, SF_RESTART, false},
 };
@@ -90,6 +91,7 @@ std::string Server::ServerSettingValue(const std::string& key) const {
     if (key == "partner_cheats") return Flag(m_cfg.partnerCheats);
     if (key == "admin_password") return m_cfg.adminPassword;
     if (key == "snapshot_minutes") return Number(m_cfg.snapshotMinutes);
+    if (key == "backup_minutes") return Number(m_cfg.backupMinutes);
     if (key == "dedicated") return Flag(m_cfg.dedicated);
     if (key == "internet") return Flag(m_cfg.internet);
     if (key == "admins") {
@@ -140,6 +142,8 @@ bool Server::ApplyServerSetting(const std::string& key, const std::string& value
         m_cfg.adminPassword = value;
     } else if (key == "snapshot_minutes") {
         m_cfg.snapshotMinutes = number;
+    } else if (key == "backup_minutes") {
+        m_cfg.backupMinutes = number;
     } else if (key == "admins") {
         m_cfg.admins.clear();
         for (auto& nick : Split(value, ','))

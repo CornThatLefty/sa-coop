@@ -294,7 +294,9 @@ void NetClient::ThreadMain(std::string host, uint16_t port) {
         // graceful quit: data = 1 tells the server it was not a timeout
         enet_peer_disconnect_later(peer, 1);
         ENetEvent ev;
-        uint64_t deadline = GetTickCount64() + 1000;
+        // 4 s at most, and as long as the server takes to confirm otherwise: a host's last world snapshot (200 KB) goes
+        // out here, and a second was for a profile of a few hundred bytes
+        uint64_t deadline = GetTickCount64() + 4000;
         while (GetTickCount64() < deadline && enet_host_service(client, &ev, 50) >= 0) {
             if (ev.type == ENET_EVENT_TYPE_RECEIVE) enet_packet_destroy(ev.packet);
             if (ev.type == ENET_EVENT_TYPE_DISCONNECT) break;

@@ -207,6 +207,7 @@ static int ServerMain(int argc, wchar_t** argv) {
         if (std::string n = ToLower(Trim(nick)); !n.empty()) cfg.admins.push_back(n);
     cfg.adminPassword = ini.Get("server", "admin_password", "");
     cfg.snapshotMinutes = ini.GetFloat("server", "snapshot_minutes", 5.0f);
+    cfg.backupMinutes = ini.GetFloat("server", "backup_minutes", 30.0f);
     cfg.dataDir = dataDir;
     cfg.configPath = configPath;
 

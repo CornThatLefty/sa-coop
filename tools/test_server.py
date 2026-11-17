@@ -112,7 +112,9 @@ class Server:
             (self.dir / name).write_text(text, encoding="utf-8")
 
     def write_ini(self, body):
-        self.ini.write_text("[server]\nname = test\ninternet = 0\nbind = 127.0.0.1\nmax_players = 4\n" + body, encoding="utf-8")
+        # backup_minutes = 0: every replaced world is a backup, as the tests of the backups count them
+        self.ini.write_text("[server]\nname = test\ninternet = 0\nbind = 127.0.0.1\nmax_players = 4\nbackup_minutes = 0\n" + body,
+                            encoding="utf-8")
 
     def start(self):
         cmd = [str(find_bin("coop-server")), "--config", str(self.ini), "--data", str(self.data), "--port", str(self.port)] + self.args
@@ -683,6 +685,49 @@ def host_of_a_standing_server_gets_its_stored_world(make):
     check(a.host == a.id and a.world == 1, "the first player is the host of a server with a world")
     a.send("request")
     got_world(a, seed_crc)
+
+
+@test
+def next_host_gets_the_world_the_last_one_left(make):
+    """A host uploads its world as it leaves; the next player in is the host and is given that world, with its own
+    profile of that game. Backups: the first replaced world, then one a mission ("progress"), not one a snapshot."""
+    s = make("backup_minutes = 30\n")
+    a = s.join("Alice")
+    a.send(IN_GAME)
+    first, first_crc = make_world(s, "first.b", 80)
+    a.send(f"upload {first} host_snapshot")
+    a.send("gameid 0C0FFEE0")
+    a.settle()
+    a.send("profile 0C0FFEE0 alice-money")
+    second, second_crc = make_world(s, "second.b", 81)
+    a.send(f"upload {second} host_snapshot")
+    s.wait_log(r"версия 2")
+    third, third_crc = make_world(s, "third.b", 82)
+    a.send(f"upload {third} host_snapshot")       # a snapshot minutes after a backup: no backup of its own
+    s.wait_log(r"версия 3")
+    fourth, fourth_crc = make_world(s, "fourth.b", 83)
+    a.send(f"upload {fourth} progress")           # a mission passed: backed up whatever the time
+    s.wait_log(r"версия 4")
+    last, last_crc = make_world(s, "last.b", 84)
+    a.send(f"upload {last} host_leaves")
+    s.wait_log(r"версия 5")  # the game's own connection sends what is queued before it closes; the test client's does not
+    a.quit()
+    world = s.data / "world"
+    check((world / "world.b.2").read_bytes() == first.read_bytes(), "backup 2: the first replaced world of this run")
+    check((world / "world.b.1").read_bytes() == third.read_bytes(), "backup 1: the world a passed mission replaced")
+    check(not (world / "world.b.3").exists(), "a snapshot soon after a backup makes none")
+
+    b = s.join("Bob", expect_welcome=False)
+    b.expect(r"EVT WELCOME ok=1 id=(\d+) host=\1 world=1 .* game=0C0FFEE0 version=5")  # the host at once, a world waits
+    b.expect(r"EVT PROFILE size=0 game=0C0FFEE0")  # its own of that game: none yet
+    b.send("request")
+    got_world(b, last_crc)
+    b.send("profile 0C0FFEE0 bob-money")
+    b.settle()
+    time.sleep(0.5)
+    b.quit()
+    a2 = s.join("Alice", expect_welcome=False)
+    a2.expect(r"EVT PROFILE size=11 game=0C0FFEE0 text=alice-money")
 
 
 def settings_of(p):

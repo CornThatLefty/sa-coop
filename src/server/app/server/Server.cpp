@@ -1024,11 +1024,14 @@ void Server::RotateBackups() {
     for (int i = kWorldBackups - 1; i >= 1; --i)
         if (FileExists(BackupPath(i))) RenameFile(BackupPath(i), BackupPath(i + 1));
     CopyFileOver(WorldPath(), BackupPath(1));
+    m_backupMs = NowMs();
 }
 
 void Server::StoreWorld(std::vector<uint8_t>&& data, const std::string& label) {
     bool same = data.size() == m_world.size() && !memcmp(data.data(), m_world.data(), data.size());
-    if (!same && !m_world.empty()) RotateBackups();
+    // the first replaced world of this run, one after a passed mission, and one when the last backup is old enough
+    bool due = !m_backupMs || label == "progress" || NowMs() - m_backupMs >= (uint64_t)(m_cfg.backupMinutes * 60000.0f);
+    if (!same && !m_world.empty() && due) RotateBackups();
     m_world = std::move(data);
     m_worldLabel = label;
     WriteFileBytes(WorldPath(), m_world.data(), m_world.size(), false);  // the network thread: no wait for the disk
