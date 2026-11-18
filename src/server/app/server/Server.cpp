@@ -252,6 +252,11 @@ void Server::OnPacket(ENetPeer* peer, uint8_t channel, const uint8_t* data, size
         if (id == C_HELLO) HandleHello(*p, r);
         return;
     }
+    // another player's character is changed by who may change the server's settings (the F8 window's Cheats tab)
+    if (id == G_CHAR_SET && !IsAdmin(p)) {
+        LOGW("%s may not change a character: no admin, and not the host of a hosted game", p->name.c_str());
+        return;
+    }
     if (IsRelayed(id)) {
         Relay(*p, channel, data, size, flags);
         return;

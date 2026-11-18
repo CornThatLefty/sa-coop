@@ -446,6 +446,17 @@ void WatchDone(bool rebase) {
         if (!rebase && v > seen) up.push_back({c, v - seen});
         seen = v;
     }
+    if (!up.empty()) LOGI("Side jobs: %zu value(s) of ours sent (global %u = %d the first)", up.size(), up[0].first, up[0].second);
+    SendDone(up);
+}
+
+// The jobs done here, all of them, at each rebase (a player came, a world or a profile went on). A flag went out once,
+// in the second it rose: a game that missed it (loading, or its own flag already up with no reward behind it) never got
+// the reward. The other game takes the ones it lacks. Not the world's own flags: those come with the host's world.
+void SendDoneState() {
+    std::vector<std::pair<uint16_t, int32_t>> up;
+    for (const DoneFlag& d : kDoneFlags)
+        if (int32_t v = Global(d.global); !d.world && v > 0 && v < 256) up.push_back({d.global, v});
     SendDone(up);
 }
 
@@ -488,6 +499,7 @@ constexpr StatRange kSharedStats[] = {
     {2, 2, R_MAX},       {10, 12, R_MAX},     {17, 19, R_MAX},     {40, 40, R_MAX},     {51, 51, R_MAX},    // records
     {81, 81, R_MAX},     {139, 143, R_MAX},   {157, 160, R_MAX},   {174, 175, R_MAX},   {205, 211, R_MAX},  // and skills
     {215, 215, R_MAX},   {223, 223, R_MAX},   {229, 230, R_MAX},
+    {24, 24, R_MAX},     {343, 347, R_MAX},   // the paramedic's max health; the rewards that are no stat (g_rewards)
     {48, 49, R_MIN},     {172, 172, R_MIN},   {202, 202, R_MIN},   {212, 212, R_MIN},   {219, 222, R_MIN},  // best times
     {246, 250, R_MIN},   {258, 301, R_MIN},
     {0, 1, R_SET},       {146, 148, R_SET},   {180, 181, R_SET},   {302, 342, R_SET},  // the world's, host -> partner
@@ -498,7 +510,35 @@ uint8_t RuleOf(uint16_t id) {
         if (id >= r.first && id <= r.last) return r.rule;
     return 0;
 }
-uint32_t& StatBits(uint16_t id) {  // ids 0..81 are floats (StatTypesFloat), 120..342 ints
+// The rewards of the side jobs that are no stat: max armour (vigilante), never tired (burglary), fireproof (firefighter),
+// taxis with nitro, the pimp's. Numbers beside the stats while a tick runs (343..347), so the stats' rule carries them:
+// the higher of the two games holds in both. A reward was given once, when its job's flag rose in the other game
+// (G_SIDE_DONE); the game that missed that moment stayed without it (18.11: a joint paramedic job at level 12 raised
+// one player's max health only). A value, unlike a moment, is compared again at every join and world load.
+constexpr uint16_t kRewardFirst = 343, kRewardLast = 347;
+uint32_t g_rewards[kRewardLast - kRewardFirst + 1];
+uint8_t& RewardByte(int i) {
+    CPlayerInfo& info = PlayerInfos()[0];
+    switch (i) {
+    case 0: return info.maxArmour;
+    case 1: return ((uint8_t*)&info)[0x14C];        // m_bDoesNotGetTired
+    case 2: return ((uint8_t*)&info)[0x14E];        // m_bFireProof
+    case 3: return Ref<uint8_t>(0x969130 + 91);     // CCheat::m_aCheatsActive: taxis with nitro
+    default: return Ref<uint8_t>(0x969130 + 90);    // the pimp's cheat
+    }
+}
+void LoadRewards() {
+    for (int i = 0; i <= kRewardLast - kRewardFirst; ++i) g_rewards[i] = RewardByte(i);
+}
+void StoreRewards() {
+    for (int i = 0; i <= kRewardLast - kRewardFirst; ++i) {
+        uint8_t now = (uint8_t)std::min<uint32_t>(g_rewards[i], 255);
+        if (RewardByte(i) != now) RewardByte(i) = now;
+    }
+}
+
+uint32_t& StatBits(uint16_t id) {  // ids 0..81 are floats (StatTypesFloat), 120..342 ints, 343..347 the rewards
+    if (id >= kRewardFirst) return g_rewards[id - kRewardFirst];
     return Ref<uint32_t>(id < 82 ? kStatsBlock + kFloatStats + id * 4u : kStatsBlock + (id - 120u) * 4u);
 }
 double StatNum(uint16_t id, uint32_t bits) {
@@ -520,7 +560,7 @@ struct StatEntry {
     uint8_t rule;
     uint32_t bits;
 };
-uint32_t g_statBase[343];  // the shared stats as last seen: what changed since goes out
+uint32_t g_statBase[kRewardLast + 1];  // the shared stats as last seen: what changed since goes out
 bool g_statBased = false;  // false: rebase first (a world loaded, a profile went on, a player came)
 std::vector<StatEntry> g_statQueue;  // arrived before this game could take them (a world loading, no profile yet)
 bool g_statAnswer = false;  // a full set came: ours goes back once we are ready
@@ -561,8 +601,10 @@ void ApplyStat(const StatEntry& e) {
         g_statBase[e.id] = StatBitsOf(e.id, StatNum(e.id, g_statBase[e.id]) + b);  // ours did not change: nothing goes back
         return;
     }
-    if (e.rule == R_MAX && b > a) cur = e.bits;
-    else if (e.rule == R_MIN && b > 0 && (a == 0 || b < a)) cur = e.bits;
+    if (e.rule == R_MAX && b > a) {
+        cur = e.bits;
+        if (e.id == 24 || e.id >= kRewardFirst) LOGI("A reward of the other player's here too: value %u is %g (was %g)", e.id, b, a);
+    } else if (e.rule == R_MIN && b > 0 && (a == 0 || b < a)) cur = e.bits;
     else if (e.rule == R_SET && !Net().IsHost()) cur = e.bits;
     g_statBase[e.id] = cur;
 }
@@ -574,7 +616,7 @@ void HandleStatSync(uint8_t from, Reader& r) {
     if (!r.Ok() || from == Net().MyId()) return;
     for (const StatEntry& e : in) {
         // only the listed stats with their own rule: the message comes from another game
-        if (e.id > 342 || (e.id >= 82 && e.id < 120) || RuleOf(e.id) != e.rule || (e.rule == R_SET && from != Net().HostId()))
+        if (e.id > kRewardLast || (e.id >= 82 && e.id < 120) || RuleOf(e.id) != e.rule || (e.rule == R_SET && from != Net().HostId()))
             continue;
         if (g_statQueue.size() < 2000) g_statQueue.push_back(e);
     }
@@ -585,14 +627,17 @@ void HandleStatSync(uint8_t from, Reader& r) {
 // every second, in the shared world (the partner: once its profile is on)
 void StatTick(bool ready) {
     if (!ready) return;
+    LoadRewards();
     if (!g_statBased) {  // a load nobody's stats came from: taken as it is, then our records go out
         ForSharedStats([](uint16_t id, uint8_t) { g_statBase[id] = StatBits(id); });
         g_statBased = true;
         SendFullStats(1);
         WatchDone(true);
+        SendDoneState();
     }
     for (const StatEntry& e : g_statQueue) ApplyStat(e);
     g_statQueue.clear();
+    StoreRewards();
     if (g_statAnswer) g_statAnswer = false, SendFullStats(2);
     std::vector<StatEntry> out;
     ForSharedStats([&](uint16_t id, uint8_t rule) {

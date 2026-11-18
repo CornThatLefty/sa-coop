@@ -1,10 +1,32 @@
-Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 13: the server's profile is the character in every role,
-saved every 5 s.
+Fork of SA:COOP for GTA San Andreas 1.0 US. Test build 14: side job rewards reach every player, and the F8 window
+has a Cheats tab that reads and changes any player's character.
 
-It connects to test builds 6 to 12 (protocol 65) and not to builds 1 to 5 or to upstream 0.3.4. The profile fixes
-need build 13 in every player's game. The server's change is small (a read after a write, two log lines).
+Protocol 66: a build 14 game connects only to a build 14 server and plays only with build 14 games. The server is
+updated first (a panel's Reinstall), then every player.
 
-## Fixed since test build 12
+## Fixed since test build 13
+
+- **A side job's reward in one game only.** A joint paramedic job at level 12 raised the max health of the job's
+  owner and not of the other player. A reward went out once, in the second it was earned, and a game that missed it
+  stayed without. Rewards are compared as values now, at every join and world load: max health, max armour, sprint
+  without tiring, fireproof, nitro in taxis and the pimp's reward go to the higher of the two games.
+  Two players of build 14 in one game get the same max health without doing anything: the lower one rises within a
+  second of joining.
+
+## New since test build 13
+
+- **Cheats tab (F8).** A player's character, this game's own or another player's: health, armour, max health, max
+  armour, money, wanted level, the body's stats, the skills, the weapon skills, the job rewards, every weapon with
+  its rounds, any stat by its number and any script variable by its number. `Player` picks whose, `Section` picks
+  the rows; a number is applied with Enter.
+  The host of a game started from the F9 window and a server's admins change; the other players read. On a server
+  with `dedicated = 0` the host is whoever holds the role.
+  A script variable is written as it is: a wrong value in a wrong variable breaks a mission or a job in that world.
+
+To check: F8, Cheats, the other player picked, `Max health (stat)` set to 1000, Enter: its health bar grows and the
+value stays after it leaves and joins again.
+
+## Fixed in test build 13
 
 - **Weapons came and went with the role.** A partner's PC keeps the weapons carried at the host's last save and
   puts them back when the host loads a game. On a standing server every host that joined counted as such a load:
@@ -212,7 +234,7 @@ Either every player installs the extras or none: a pack's skin is not shown to a
    section included, and can be edited before the first game is hosted. They replace the files of an earlier install:
    to keep an edited `coop\server.ini`, skip those two files when unpacking. `coop\coop.ini` is not in the zip.
 3. Optional: unpack `SA-COOP-extras.zip` over the game folder the same way.
-4. The F9 window shows `v0.3.4-fork.13` in its corner when the build is in place.
+4. The F9 window shows `v0.3.4-fork.14` in its corner when the build is in place.
 5. The host starts a game from F9 as before. A `coop\server.ini` kept from an earlier install gets its `[balance]`
    section from the server on the first start.
 
