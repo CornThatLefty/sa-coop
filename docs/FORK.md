@@ -218,7 +218,8 @@ Test build 4 had the name tags' checkbox in the F9 window; test build 6 moved it
 
 F8 in the game opens the server's settings: the `[server]` and `[balance]` sections of its `server.ini` on four tabs
 (Server, Combat, Economy, Streets). The host of a game started from the F9 window and a server's admins change them there;
-other players see the values without the passwords and the admin list.
+other players see the values without the passwords and the admin list. A fifth tab, Cheats, is no setting of the
+server's: see [Cheats tab](#cheats-tab-test-build-14).
 
 A change is in effect at once, is written to `server.ini`, and is told to every player in the chat
 (`Server setting: friendly_fire = 1 (Alice).`).
@@ -243,6 +244,40 @@ host's game writes the four rules back to `coop.ini` when they change here.
 setting's kind, limits and flags: the window draws what it is sent, so a setting a later server adds shows under its
 key), `S_RULES` (the server's name and the four rules, to everyone when one changes).
 `src/common/api/protocol/Settings.h`, `src/server/app/server/Settings.cpp`, `src/client/pages/server-menu`.
+
+### Cheats tab (test build 14)
+
+The fifth tab of the F8 window shows a player's character and changes it. `Player` picks whose (this game's own or
+any other player's), `Section` picks the rows.
+
+| Section | Rows |
+| --- | --- |
+| Health and money | Health, armour, max health (stat 24, 0-1000), max armour, money, wanted level |
+| Body | Fat, stamina, muscle, lung capacity, sex appeal, respect, luck, fighting style |
+| Skills | Driving, flying, bike, cycling, gambling |
+| Weapon skills | The eleven of the game, pistol to rifle |
+| Rewards | Sprint without tiring, fireproof, nitro in taxis, pimp's reward, fast reload, next death without the fee, next arrest without the fee |
+| Melee weapons, Thrown weapons and gifts, Guns, Heavy weapons and gear | A row per weapon: its rounds. 0 takes it away, a number gives it with that many |
+| Any stat by number | A stat's number (0-81, 120-342), then its value |
+| Script variable by number | The number of a `main.scm` global, then its value (a job's "done" flag, a level counter) |
+
+- A number is typed and applied with Enter; an on-or-off row is a checkbox. A value outside its range is brought into
+  it.
+- The change is made by the game of the player it belongs to, and that game sends the profile to the server at once.
+- Rights are the F8 window's: the host of a game started from the F9 window and a server's admins change; the other
+  players read. The server passes a change of another player's character on only from such a player, and logs a
+  refusal (`<name> may not change a character`). The changed player's chat says who changes it, once in 30 s.
+- Max health is the stat: the engine sets the health limit from it each frame (`CPlayerInfo::Process`, 0x57015D:
+  `GetFatAndMuscleModifier(9)` into the ped's `m_fMaxHealth` and into `m_nMaxHealth`).
+- A script variable is written as it is: the game's scripts read it at their next step. A wrong number in a wrong
+  variable breaks a mission or a job in that world.
+- The values that are shared between the players (see below) go back to the higher one at the next join or world
+  load when lowered in one game only.
+
+**Wire** (protocol 66): `G_CHAR_GET` (whose, the fields), `G_CHAR_VALUES` (to whom, field and value pairs),
+`G_CHAR_SET` (whose, field, value). A field is a u16: a stat's number, `0x1000`+ for money, health and the like,
+`0x2000` + weapon type, `0x4000` + global. `src/client/features/character`, the tab in
+`src/client/pages/server-menu/ServerMenu.cpp`, the server's check in `Server::OnReceive`.
 
 ## Host of a standing server plays its world
 
@@ -641,6 +676,10 @@ All for `gta_sa.exe` 1.0 US, taken from gta-reversed and checked in the executab
 
 | Address | What | Checked by |
 | --- | --- | --- |
+| `0x57015D` | In `CPlayerInfo::Process`: `GetFatAndMuscleModifier(9)` (max health from stat 24) stored to the ped's `m_fMaxHealth` (`+0x544`) and, as a byte, to `m_nMaxHealth` (`+0x14F`) | `push 9; call 0x559AF0; fstp [ecx+0x544]; ... mov [esi+0x14F], al` |
+| `0x55C180` | `CStats::IncrementStat(stat, value)`: a float stat (below 82) is added to in `StatTypesFloat` (`0xB79380`) and held at 1000 when capped; no other state for stat 24 | Its float branch at `0x55C1A1`–`0x55C1F0` |
+| `ScriptSpace + 3` | The size of `main.scm`'s globals in bytes: the file starts with a jump over them (`02 00 01 <offset>`) | The file's first bytes are `02 00 01 20 AB 00 00`: 43808 bytes, 10952 globals |
+| `main.scm` `0x2C6041` | The paramedic's reward: `if $1487 == 0`, stat 24 read, times 1.5, `0A1F` adds it to the stat, `$1487 = 1` | The file's bytes there (`53 06 04 18 ..`, `13 00 .. 00 00 C0 3F`, `1F 0A 04 18 ..`, `04 00 02 3C 17 04 01`) |
 | `0x49AD50` | `CShopping::GetPrice(key)`, cdecl | Its body reads `ms_numPrices` and `ms_prices`; called from `CShopping::Buy` at `0x49C000` and from the script command at `0x46EBBE`, nowhere else |
 | `0xA9A7C8` | `CShopping::ms_priceSectionLoaded` | Written by `LoadPrices` and `RemoveLoadedPrices` |
 | key 48 | `WEAPON_ARMOUR` as a `Weapons` item | `cmp esi, 0x30` in `CShopping::Buy` at `0x49C20D` |
@@ -720,6 +759,29 @@ bar only the vehicle the exit message named. `F2_ENTERING` is a new bit of a byt
 protocol number stays 65, and a game of an earlier build never sets the bit, so its copy behaves as before.
 Deduced from the code and a tester's description; not reproduced in a game. `ApplyState`, `ApplyVehicleSeat`,
 `HandleExitCar` in `src/client/entities/player/Players.cpp`.
+
+**A side job's reward in one game only (test build 14).** A joint paramedic job passed level 12 (18.11): the
+owner's max health rose, the other player's did not. The owner's `coop.log` shows the job's end and nothing of the
+reward (it logged none); the other game's log was not at hand, so which step failed there is not known. The path it
+had to take was a single message:
+
+- The job's script raises stat 24 by 1.5 times its value and sets `$1487`. The owner's game saw the flag rise and
+  sent it once (`G_SIDE_DONE`). The other game gave the reward if its own flag was 0, and nothing otherwise.
+- A game that missed that one message, or whose flag was already up with no reward behind it, stayed without the
+  reward for good.
+
+Now the rewards are values, compared again at every join, world load and profile:
+
+| Reward | Carried as | Rule |
+| --- | --- | --- |
+| Max health (paramedic) | Stat 24 | The higher of the two games holds in both |
+| Max armour (vigilante), sprint without tiring (burglary), fireproof (firefighter), nitro in taxis, the pimp's | Values 343-347 beside the stats, in the same `G_STAT_SYNC` | The higher holds |
+| Every personal "done" flag (paramedic, vigilante, firefighter, burglary, taxi, pimp, the assets, freight, valet) | `G_SIDE_DONE` with all the flags that are up | Sent at every rebase as well as when one rises; a game takes the ones it lacks, with their rewards |
+
+`coop.log`: `Side jobs: N value(s) of ours sent` in the game where a flag rose, `A reward of the other player's here
+too: value 24 is 1000 (was 569)` where a value came. Two players of build 14 in one game end up with the same max
+health within a second of the second one's profile loading. `kSharedStats`, `LoadRewards`, `SendDoneState` in
+`src/client/features/progress/Progress.cpp`. Not run in a game.
 
 **Memory in the logs (test build 12).** A partner's game froze 90 minutes into a session (17.11). Its `crash.log`
 held `Exception E06D7363` in Mod Loader's `std.bank.dll`. Read against that DLL, the return addresses are

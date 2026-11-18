@@ -273,6 +273,12 @@ enum MsgId : uint8_t {
     G_OBJ_HOLD = 163,         // reliable: the partner holds the copy of a host's mission object: u8 op (1 hold, 2 release,
                               // 3 enter pressed, 4 deny: host -> partner), u16 object, release: vec3 pos, quat rot
 
+    // A player's character as numbered values (client features/character): u16 field, i32 value
+    G_CHAR_GET = 189,         // reliable: u8 whose, u8 n, n x u16 field: that player's game answers with G_CHAR_VALUES
+    G_CHAR_VALUES = 190,      // reliable: u8 to, u8 n, n x {u16 field, i32 value}: the sender's own character
+    G_CHAR_SET = 191,         // reliable: u8 whose, u16 field, i32 value: that player's game sets it and answers. The
+                              // server passes it on only from a player who may change its settings
+
     G_VOICE = 200,            // unreliable: voice frame
     G_LAST = 255,
 };

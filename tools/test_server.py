@@ -429,6 +429,22 @@ def a_saved_profile_is_read_back_at_once(make):
 
 
 @test
+def a_character_is_changed_only_by_who_may_change_settings(make):
+    """G_CHAR_SET (191) is passed on from the host of a hosted game and not from a partner; G_CHAR_GET (189) from anyone."""
+    s = make()
+    a = s.join("Alice")
+    b = s.join("Bob")
+    a.settle(), b.settle()
+    b.send("game 189 0 00010010")          # whose 0, one field, 0x1000
+    a.expect(r"EVT GAME id=189 from=1")
+    b.send("game 191 0 00001064000000")    # whose 0, field 0x1000, value 100
+    s.wait_log(r"Bob may not change a character")
+    a.refuse(r"EVT GAME id=191")
+    a.send("game 191 0 01001064000000")
+    b.expect(r"EVT GAME id=191 from=0")
+
+
+@test
 def game_id_survives_a_restart(make):
     """The stored world's game is known from the first join on after a restart, not when a host says it again."""
     s = make()
